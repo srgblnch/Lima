@@ -113,7 +113,6 @@ ADSC_MAJ_VERSION = $(shell echo $(ADSC_FULL_VERSION) | cut -d. -f1)
 INSTALL_ADSC_VDIR = $(INSTALL_ADSC_DIR)/v$(ADSC_FULL_VERSION)
 endif
 
-
 ifneq ($(COMPILE_MYTHEN), 0)
 INSTALL_MYTHEN_DIR = $(INSTALL_PLAT_DIR)/Mythen
 MYTHEN_FULL_VERSION = $(shell cat camera/mythen/VERSION)
@@ -126,6 +125,13 @@ INSTALL_UEYE_DIR = $(INSTALL_PLAT_DIR)/Ueye
 UEYE_FULL_VERSION = $(shell cat camera/ueye/VERSION)
 UEYE_MAJ_VERSION = $(shell echo $(UEYE_FULL_VERSION) | cut -d. -f1)
 INSTALL_UEYE_VDIR = $(INSTALL_UEYE_DIR)/v$(UEYE_FULL_VERSION)
+endif
+
+ifneq ($(COMPILE_XPAD), 0)
+INSTALL_XPAD_DIR = $(INSTALL_PLAT_DIR)/XPad
+XPAD_FULL_VERSION = $(shell cat camera/xpad/VERSION)
+XPAD_MAJ_VERSION = $(shell echo $(XPAD_FULL_VERSION) | cut -d. -f1)
+INSTALL_XPAD_VDIR = $(INSTALL_XPAD_DIR)/v$(XPAD_FULL_VERSION)
 endif
 
 .PHONY: install
@@ -229,12 +235,14 @@ endif
 ifneq ($(COMPILE_ADSC), 0)
 	mkdir -p $(INSTALL_ADSC_VDIR)
 	cp camera/adsc/python/__init__.py $(INSTALL_ADSC_DIR)
-	rm -rf $(INSTALL_LIB_DIR)/liblimaadsc.so*
-	cp build/liblimaadsc.so.$(ADSC_FULL_VERSION) $(INSTALL_LIB_DIR)
-	cp -d build/liblimaadsc.so.$(ADSC_MAJ_VERSION) $(INSTALL_LIB_DIR)
-	cp sip/adsc/limaadsc.so $(INSTALL_ADSC_VDIR)
+	# rm -rf $(INSTALL_LIB_DIR)/liblimaadsc.so*
+	# cp build/liblimaadsc.so.$(ADSC_FULL_VERSION) $(INSTALL_LIB_DIR)
+	# cp -d build/liblimaadsc.so.$(ADSC_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	# cp sip/adsc/limaadsc.so $(INSTALL_ADSC_VDIR)
 	cp camera/adsc/sdk/adsc_sources/lib/linux/libauxlib.so $(INSTALL_LIB_DIR)/libauxlib.so
 	cp camera/adsc/sdk/adsc_sources/lib/linux/libdetcon_th.so $(INSTALL_LIB_DIR)/libdetcon_th.so
+	cp camera/adsc/sdk/adsc_sources/lib/linux/libadsc.so $(INSTALL_LIB_DIR)/libadsc.so
+	cp camera/adsc/python/*.py $(INSTALL_ADSC_VDIR)
 endif
 
 ifneq ($(COMPILE_MYTHEN), 0)
@@ -253,4 +261,11 @@ ifneq ($(COMPILE_UEYE), 0)
 	cp build/liblimaueye.so.$(UEYE_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimaueye.so.$(UEYE_MAJ_VERSION) $(INSTALL_LIB_DIR)
 	cp sip/ueye/limaueye.so $(INSTALL_UEYE_VDIR)
+endif
+
+ifneq ($(COMPILE_XPAD), 0)
+	mkdir -p $(INSTALL_XPAD_VDIR)
+	cp camera/xpad/sdk/imxpad_lib/xpci_lib/libxpci.so $(INSTALL_LIB_DIR)/libxpad.so
+	cp camera/xpad/python/__init__.py $(INSTALL_XPAD_DIR)
+	cp camera/xpad/python/*.py $(INSTALL_XPAD_VDIR)
 endif

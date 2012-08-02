@@ -77,7 +77,7 @@ COMPILE_ADSC = 0
 endif
 
 ifneq ($(COMPILE_ADSC),0)
-sub-dirs += adsc
+#sub-dirs += adsc
 endif
 
 ifndef COMPILE_MYTHEN
@@ -93,7 +93,7 @@ sub-dirs += ueye
 endif
 
 ifneq ($(COMPILE_XPAD),0)
-sub-dirs += xpad
+#sub-dirs += xpad
 endif
 
 include ../global.inc

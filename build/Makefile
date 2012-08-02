@@ -345,7 +345,7 @@ $(adsc-full):		$(adsc-objs)
 	rm -f $(adsc-maj);  ln -s $(adsc-full) $(adsc-maj)
 	rm -f $(adsc-base); ln -s $(adsc-maj)  $(adsc-base)
 
-build_targets += $(adsc-full)
+#build_targets += $(adsc-full)
 
 endif
 
@@ -406,7 +406,7 @@ $(xpad-full):		$(xpad-objs)
 	rm -f $(xpad-maj);  ln -s $(xpad-full) $(xpad-maj)
 	rm -f $(xpad-base); ln -s $(xpad-maj)  $(xpad-base)
 
-build_targets += $(xpad-full)
+#build_targets += $(xpad-full)
 
 endif
 

@@ -55,7 +55,7 @@ sip-modules += roperscientific
 endif
 
 ifneq ($(COMPILE_ADSC), 0)
-sip-modules += adsc
+#sip-modules += adsc
 endif
 
 ifneq ($(COMPILE_MYTHEN), 0)

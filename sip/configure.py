@@ -37,10 +37,10 @@ modules = [('core',		['common', 'hardware', 'control']),
            ('prosilica',        [os.path.join('camera','prosilica')]),
            ('ueye',             [os.path.join('camera','ueye')]),
            ('roperscientific',  [os.path.join('camera','roperscientific')]),
-           ('adsc',  		[os.path.join('camera','adsc')]),
+#            ('adsc',  		[os.path.join('camera','adsc')]),
            ('mythen',           [os.path.join('camera','mythen')]),
            ('perkinelmer',      [os.path.join('camera','perkinelmer')]),
-           ('xpad',             [os.path.join('camera','xpad')]),
+#           ('xpad',             [os.path.join('camera','xpad')]),
            ]
 
 espiaModules = ['espia', 'frelon', 'maxipix']
