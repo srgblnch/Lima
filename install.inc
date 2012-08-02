@@ -325,3 +325,5 @@ ifneq ($(COMPILE_MARCCD), 0)
 	cp sip/marccd/limamarccd.so $(INSTALL_MARCCD_VDIR)
 	cp camera/marccd/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
+	python -m compileall $(INSTALL_LIMA_DIR)
+
