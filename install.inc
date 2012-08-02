@@ -269,3 +269,4 @@ ifneq ($(COMPILE_XPAD), 0)
 	cp camera/xpad/python/__init__.py $(INSTALL_XPAD_DIR)
 	cp camera/xpad/python/*.py $(INSTALL_XPAD_VDIR)
 endif
+	python -m compileall $(INSTALL_LIMA_DIR)
