@@ -321,6 +321,7 @@ ifneq ($(COMPILE_MARCCD), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimamarccd.so*
 	cp build/liblimamarccd.so.$(MARCCD_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimamarccd.so.$(MARCCD_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d third-party/yat/src/.libs/libyat.so* $(INSTALL_LIB_DIR)
 	cp -d build/liblimamarccd.so $(INSTALL_LIB_DIR)
 	cp sip/marccd/limamarccd.so $(INSTALL_MARCCD_VDIR)
 	cp camera/marccd/include/*.h $(INSTALL_INCLUDE_DIR)

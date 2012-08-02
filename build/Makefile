@@ -386,7 +386,7 @@ endif
 
 ifneq ($(COMPILE_MARCCD),0)
 LDFLAGS         += -L../third-party/yat/src/.libs -L../../lib
-LDFLAGS		+= -lyat -lDiffractionImage
+LDFLAGS		+= -lyat -lDiffractionImage -lrt
 		 
 
 name		:= marccd
