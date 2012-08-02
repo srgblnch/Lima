@@ -27,20 +27,21 @@ import numpy
 import platform
 from checksipexc import checksipexc
 
-modules = [('core',		['common', 'hardware', 'control']),
-	   ('simulator',	[os.path.join('camera','simulator')]),
-	   ('pco',	        [os.path.join('camera','pco')]),
-	   ('espia',		[os.path.join('camera','common','espia')]),
-	   ('frelon',		[os.path.join('camera','frelon')]),
-	   ('maxipix',		[os.path.join('camera','maxipix')]),
+modules = [('core',     ['common', 'hardware', 'control']),
+       ('simulator',    [os.path.join('camera','simulator')]),
+       ('pco',          [os.path.join('camera','pco')]),
+       ('espia',        [os.path.join('camera','common','espia')]),
+       ('frelon',       [os.path.join('camera','frelon')]),
+       ('maxipix',      [os.path.join('camera','maxipix')]),
            ('basler',           [os.path.join('camera','basler')]),
            ('prosilica',        [os.path.join('camera','prosilica')]),
            ('ueye',             [os.path.join('camera','ueye')]),
            ('roperscientific',  [os.path.join('camera','roperscientific')]),
-#            ('adsc',  		[os.path.join('camera','adsc')]),
+#            ('adsc',       [os.path.join('camera','adsc')]),
            ('mythen',           [os.path.join('camera','mythen')]),
            ('perkinelmer',      [os.path.join('camera','perkinelmer')]),
-#           ('xpad',             [os.path.join('camera','xpad')]),
+           ('xpad',             [os.path.join('camera','xpad')]),
+           ('marccd',             [os.path.join('camera','marccd')]),
            ]
 
 espiaModules = ['espia', 'frelon', 'maxipix']
@@ -144,7 +145,9 @@ def main():
             extra_cxxflags += ['-DUSE_GIGE']
         elif(modName == 'ueye') and platform.system() != 'Windows':
             extra_cxxflags += ['-D__LINUX__']
-
+        elif(modName == 'marccd'):
+	    extraIncludes += ['../../../include/DiffractionImage']
+	    extraIncludes += ['../../third-party/yat/include']
         extraIncludes += findModuleIncludes(modName)
         
         sipFile = open(sipFileName,"a")
