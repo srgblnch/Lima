@@ -1,5 +1,2 @@
-Debug
-Release
-*.vcproj.*
-*.ncb
-*.suo
+
+.svn
