@@ -381,6 +381,38 @@ build_targets += $(mythen-full)
 endif
 
 ############################
+# LIMA - MARCCD
+############################
+
+ifneq ($(COMPILE_MARCCD),0)
+LDFLAGS         += -L../third-party/yat/src/.libs -L../../lib
+LDFLAGS		+= -lyat -lDiffractionImage -lrt
+		 
+
+name		:= marccd
+marccd-objs	:= ../camera/marccd/src/Marccd.o
+version-file	:= ../camera/marccd/VERSION
+marccd-flags	:= $(LDFLAGS)
+
+full-version	:= $(shell cat $(version-file))
+maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+
+marccd-base	:= liblima$(name).so
+marccd-full	:= $(marccd-base).$(full-version)
+marccd-maj	:= $(marccd-base).$(maj-version)
+marccd-flags	+= -fPIC -Wl,-soname,$(marccd-maj)
+
+$(marccd-full):		$(marccd-objs)
+	$(CXX) -shared -o $@ $(marccd-flags) $+ $(marccd-deps)
+	rm -f $(marccd-maj);  ln -s $(marccd-full) $(marccd-maj)
+	rm -f $(marccd-base); ln -s $(marccd-maj)  $(marccd-base)
+
+build_targets += $(marccd-full)
+
+endif
+
+
+############################
 # LIMA - XPAD
 ############################
 

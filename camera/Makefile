@@ -96,4 +96,13 @@ ifneq ($(COMPILE_XPAD),0)
 #sub-dirs += xpad
 endif
 
+ifndef COMPILE_MARCCD
+COMPILE_MARCCD = 0
+endif
+
+ifneq ($(COMPILE_MARCCD),0)
+sub-dirs += marccd
+endif
+
 include ../global.inc
+

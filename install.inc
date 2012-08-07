@@ -1,4 +1,4 @@
-############################################################################
+###########################################################################
 # This file is part of LImA, a Library for Image Acquisition
 #
 # Copyright (C) : 2009-2011
@@ -42,6 +42,9 @@ INSTALL_PLAT_DIR = $(INSTALL_LIMA_DIR)/$(INSTALL_PLAT)
 endif
 
 INSTALL_LIB_DIR = $(INSTALL_PLAT_DIR)/Lib
+INSTALL_INCLUDE_DIR = $(INSTALL_PLAT_DIR)/include
+INSTALL_PKG_CONFIG_DIR = $(INSTALL_LIB_DIR)/pkgconfig
+INSTALL_CONFIG_DEFINES = 
 
 ifneq ($(COMPILE_CORE), 0)
 INSTALL_CORE_DIR = $(INSTALL_PLAT_DIR)/Core
@@ -120,6 +123,13 @@ MYTHEN_MAJ_VERSION = $(shell echo $(MYTHEN_FULL_VERSION) | cut -d. -f1)
 INSTALL_MYTHEN_VDIR = $(INSTALL_MYTHEN_DIR)/v$(MYTHEN_FULL_VERSION)
 endif
 
+ifneq ($(COMPILE_XPAD), 0)
+INSTALL_XPAD_DIR = $(INSTALL_PLAT_DIR)/XPad
+XPAD_FULL_VERSION = $(shell cat camera/xpad/VERSION)
+XPAD_MAJ_VERSION = $(shell echo $(XPAD_FULL_VERSION) | cut -d. -f1)
+INSTALL_XPAD_VDIR = $(INSTALL_XPAD_DIR)/v$(XPAD_FULL_VERSION)
+endif
+
 ifneq ($(COMPILE_UEYE), 0)
 INSTALL_UEYE_DIR = $(INSTALL_PLAT_DIR)/Ueye
 UEYE_FULL_VERSION = $(shell cat camera/ueye/VERSION)
@@ -127,11 +137,23 @@ UEYE_MAJ_VERSION = $(shell echo $(UEYE_FULL_VERSION) | cut -d. -f1)
 INSTALL_UEYE_VDIR = $(INSTALL_UEYE_DIR)/v$(UEYE_FULL_VERSION)
 endif
 
-ifneq ($(COMPILE_XPAD), 0)
-INSTALL_XPAD_DIR = $(INSTALL_PLAT_DIR)/XPad
-XPAD_FULL_VERSION = $(shell cat camera/xpad/VERSION)
-XPAD_MAJ_VERSION = $(shell echo $(XPAD_FULL_VERSION) | cut -d. -f1)
-INSTALL_XPAD_VDIR = $(INSTALL_XPAD_DIR)/v$(XPAD_FULL_VERSION)
+ifneq ($(COMPILE_MARCCD), 0)
+INSTALL_MARCCD_DIR = $(INSTALL_PLAT_DIR)/Marccd
+MARCCD_FULL_VERSION = $(shell cat camera/marccd/VERSION)
+MARCCD_MAJ_VERSION = $(shell echo $(MARCCD_FULL_VERSION) | cut -d. -f1)
+INSTALL_MARCCD_VDIR = $(INSTALL_MARCCD_DIR)/v$(MARCCD_FULL_VERSION)
+endif
+
+ifneq ($(COMPILE_SPS_IMAGE),0)
+INSTALL_CONFIG_DEFINES += -DWITH_SPS_IMAGE
+endif
+
+ifneq ($(COMPILE_CBF_SAVING),0)
+INSTALL_CONFIG_DEFINES += -DWITH_CBF_SAVING
+endif
+
+ifneq ($(COMPILE_NXS_SAVING),0)
+INSTALL_CONFIG_DEFINES += -DWITH_NXS_SAVING
 endif
 
 .PHONY: install
@@ -142,6 +164,15 @@ install:
 	mkdir -p $(INSTALL_LIMA_DIR)
 	cp python/__init__.py $(INSTALL_LIMA_DIR)
 	mkdir -p $(INSTALL_LIB_DIR)
+	mkdir -p $(INSTALL_INCLUDE_DIR)
+	mkdir -p $(INSTALL_PKG_CONFIG_DIR)
+	sed -e "s,@prefix@,${INSTALL_DIR},g" \
+	    -e "s,@libdir@,${INSTALL_LIB_DIR},g" \
+	    -e "s,@includedir@,${INSTALL_INCLUDE_DIR},g" \
+	    -e "s,@config_defines@,${INSTALL_CONFIG_DEFINES},g" \
+	    -e "s,@VERSION@,`cat common/VERSION`,g" \
+	    Lima.pc.in > $(INSTALL_PKG_CONFIG_DIR)/Lima.pc
+
 ifneq ($(COMPILE_CORE), 0)
 	mkdir -p $(INSTALL_CORE_VDIR)
 	cp common/python/__init__.py $(INSTALL_CORE_DIR)
@@ -150,8 +181,15 @@ ifneq ($(COMPILE_CORE), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimacore.so*
 	cp build/liblimacore.so.$(CORE_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimacore.so.$(CORE_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimacore.so $(INSTALL_LIB_DIR)
 	cp sip/core/limacore.so $(INSTALL_CORE_VDIR)
 	cp common/python/Debug.py $(INSTALL_CORE_VDIR)
+	cp common/include/*.h $(INSTALL_INCLUDE_DIR)
+	cp control/include/*.h $(INSTALL_INCLUDE_DIR)
+	cp control/software_operation/include/*.h $(INSTALL_INCLUDE_DIR)
+	cp hardware/include/*.h $(INSTALL_INCLUDE_DIR)
+	cp third-party/Processlib/core/include/*.h $(INSTALL_INCLUDE_DIR)
+#	cp third-party/Processlib/core/include/*.i $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_SIMULATOR), 0)
 	mkdir -p $(INSTALL_SIMU_VDIR)
@@ -159,7 +197,9 @@ ifneq ($(COMPILE_SIMULATOR), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimasimulator.so*
 	cp build/liblimasimulator.so.$(SIMU_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimasimulator.so.$(SIMU_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimasimulator.so $(INSTALL_LIB_DIR)
 	cp sip/simulator/limasimulator.so $(INSTALL_SIMU_VDIR)
+	cp camera/simulator/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_ESPIA), 0)
 	mkdir -p $(INSTALL_ESPIA_VDIR)
@@ -167,7 +207,9 @@ ifneq ($(COMPILE_ESPIA), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimaespia.so*
 	cp build/liblimaespia.so.$(ESPIA_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimaespia.so.$(ESPIA_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimaespia.so $(INSTALL_LIB_DIR)
 	cp sip/espia/limaespia.so $(INSTALL_ESPIA_VDIR)
+	cp camera/common/espia/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_FRELON), 0)
 	mkdir -p $(INSTALL_FRELON_VDIR)
@@ -175,8 +217,10 @@ ifneq ($(COMPILE_FRELON), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimafrelon.so*
 	cp build/liblimafrelon.so.$(FRELON_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimafrelon.so.$(FRELON_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimafrelon.so $(INSTALL_LIB_DIR)
 	cp sip/frelon/limafrelon.so $(INSTALL_FRELON_VDIR)
 	cp camera/frelon/python/FrelonAcq.py $(INSTALL_FRELON_VDIR)
+	cp camera/frelon/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_MAXIPIX), 0)
 	mkdir -p $(INSTALL_MAXIPIX_VDIR)
@@ -184,13 +228,16 @@ ifneq ($(COMPILE_MAXIPIX), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimamaxipix.so*
 	cp build/liblimamaxipix.so.$(MAXIPIX_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimamaxipix.so.$(MAXIPIX_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimamaxipix.so $(INSTALL_LIB_DIR)
 	cp sip/maxipix/limamaxipix.so $(INSTALL_MAXIPIX_VDIR)
 	cp camera/maxipix/python/Mpx*.py $(INSTALL_MAXIPIX_VDIR)
+	cp camera/maxipix/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_PILATUS), 0)
 	mkdir -p $(INSTALL_PILATUS_VDIR)
 	cp camera/pilatus/python/__init__.py $(INSTALL_PILATUS_DIR)
 	cp camera/pilatus/python/*.py $(INSTALL_PILATUS_VDIR)
+	cp camera/pilatus/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_BASLER), 0)
 	mkdir -p $(INSTALL_BASLER_VDIR)
@@ -198,15 +245,19 @@ ifneq ($(COMPILE_BASLER), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimabasler.so*
 	cp build/liblimabasler.so.$(BASLER_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimabasler.so.$(BASLER_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimabasler.so $(INSTALL_LIB_DIR)
 	cp sip/basler/limabasler.so $(INSTALL_BASLER_VDIR)
+	cp camera/basler/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_PROSILICA), 0)
 	mkdir -p $(INSTALL_PROSILICA_VDIR)
 	cp camera/prosilica/python/__init__.py $(INSTALL_PROSILICA_DIR)
 	rm -rf $(INSTALL_LIB_DIR)/liblimaprosilica.so*
 	rm -rf $(INSTALL_LIB_DIR)/libPvAPI.so
+	cp camera/prosilica/include/*.h $(INSTALL_INCLUDE_DIR)
 	cp build/liblimaprosilica.so.$(PROSILICA_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimaprosilica.so.$(PROSILICA_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimaprosilica.so $(INSTALL_LIB_DIR)
 ifeq ($(PROCESSOR_TYPE),i386)
 ifeq ($(INSTALL_PLAT),redhate4) 
 	cp camera/prosilica/sdk/bin/x86/old_libPvApi.so $(INSTALL_LIB_DIR)/libPvAPI.so
@@ -229,7 +280,9 @@ ifneq ($(COMPILE_ROPERSCIENTIFIC), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimaroperscientific.so*
 	cp build/liblimaroperscientific.so.$(ROPERSCIENTIFIC_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimaroperscientific.so.$(ROPERSCIENTIFIC_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimaroperscientific.so $(INSTALL_LIB_DIR)
 	cp sip/roperscientific/limaroperscientific.so $(INSTALL_ROPERSCIENTIFIC_VDIR)
+	cp camera/roperscientific/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 
 ifneq ($(COMPILE_ADSC), 0)
@@ -238,6 +291,7 @@ ifneq ($(COMPILE_ADSC), 0)
 	# rm -rf $(INSTALL_LIB_DIR)/liblimaadsc.so*
 	# cp build/liblimaadsc.so.$(ADSC_FULL_VERSION) $(INSTALL_LIB_DIR)
 	# cp -d build/liblimaadsc.so.$(ADSC_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	# cp -d build/liblimaadsc.so $(INSTALL_LIB_DIR)
 	# cp sip/adsc/limaadsc.so $(INSTALL_ADSC_VDIR)
 	cp camera/adsc/sdk/adsc_sources/lib/linux/libauxlib.so $(INSTALL_LIB_DIR)/libauxlib.so
 	cp camera/adsc/sdk/adsc_sources/lib/linux/libdetcon_th.so $(INSTALL_LIB_DIR)/libdetcon_th.so
@@ -251,7 +305,9 @@ ifneq ($(COMPILE_MYTHEN), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimamythen.so*
 	cp build/liblimamythen.so.$(MYTHEN_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimamythen.so.$(MYTHEN_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimamythen.so $(INSTALL_LIB_DIR)
 	cp sip/mythen/limamythen.so $(INSTALL_MYTHEN_VDIR)
+	cp camera/mythen/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 
 ifneq ($(COMPILE_UEYE), 0)
@@ -260,8 +316,11 @@ ifneq ($(COMPILE_UEYE), 0)
 	rm -rf $(INSTALL_LIB_DIR)/liblimaueye.so*
 	cp build/liblimaueye.so.$(UEYE_FULL_VERSION) $(INSTALL_LIB_DIR)
 	cp -d build/liblimaueye.so.$(UEYE_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimaueye.so $(INSTALL_LIB_DIR)
 	cp sip/ueye/limaueye.so $(INSTALL_UEYE_VDIR)
+	cp camera/ueye/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
+
 
 ifneq ($(COMPILE_XPAD), 0)
 	mkdir -p $(INSTALL_XPAD_VDIR)
@@ -269,4 +328,18 @@ ifneq ($(COMPILE_XPAD), 0)
 	cp camera/xpad/python/__init__.py $(INSTALL_XPAD_DIR)
 	cp camera/xpad/python/*.py $(INSTALL_XPAD_VDIR)
 endif
+
+ifneq ($(COMPILE_MARCCD), 0)
+	mkdir -p $(INSTALL_MARCCD_VDIR)
+	cp camera/marccd/python/__init__.py $(INSTALL_MARCCD_DIR)
+	rm -rf $(INSTALL_LIB_DIR)/liblimamarccd.so*
+	cp build/liblimamarccd.so.$(MARCCD_FULL_VERSION) $(INSTALL_LIB_DIR)
+	cp -d build/liblimamarccd.so.$(MARCCD_MAJ_VERSION) $(INSTALL_LIB_DIR)
+	cp -d third-party/yat/src/.libs/libyat.so* $(INSTALL_LIB_DIR)
+	cp -d build/liblimamarccd.so $(INSTALL_LIB_DIR)
+	cp sip/marccd/limamarccd.so $(INSTALL_MARCCD_VDIR)
+	cp camera/marccd/include/*.h $(INSTALL_INCLUDE_DIR)
+endif
 	python -m compileall $(INSTALL_LIMA_DIR)
+
+

@@ -62,6 +62,9 @@ ifneq ($(COMPILE_MYTHEN), 0)
 sip-modules += mythen
 endif
 
+ifneq ($(COMPILE_MARCCD), 0)
+sip-modules += marccd
+endif
 
 ifneq ($(COMPILE_UEYE), 0)
 sip-modules += ueye
