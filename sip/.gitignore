@@ -15,6 +15,7 @@ prosilica
 roperscientific
 adsc
 mythen
+marccd
 ueye
 pco
 perkinelmer
@@ -24,5 +25,4 @@ lima*.exp
 lima*.lib
 *.pyd.manifest
 *.pyd
-
 .svn

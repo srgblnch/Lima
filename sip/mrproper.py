@@ -29,7 +29,7 @@ import shutil
 from configure import modules
 f = file('.gitignore')
 patterns = [x.strip() for x in f]
-
+patterns.remove('.svn') # has to be ignored but not removed
 
 rmList = []
 
