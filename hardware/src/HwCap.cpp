@@ -73,4 +73,15 @@ HwCap::Type HwCap::getTypeFromCtrlObj(HwVideoCtrlObj *p)
 }
 
 
+HwCap::Type HwCap::getTypeFromCtrlObj(HwEventCtrlObj *p)
+{
+	return Event;
+}
+
+HwCap::Type HwCap::getTypeFromCtrlObj(HwSavingCtrlObj*)
+{
+	return Saving;
+}
+
+
 } // namespace lima

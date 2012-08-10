@@ -240,7 +240,7 @@ class LIMACORE_API DebProxy
 	DebProxy();
 	DebProxy(DebObj *deb_obj, DebType type, ConstStr file_name, 
 		 int line_nr);
-	DebProxy(const DebProxy& p);  // should never be called
+	DebProxy(const DebProxy& p);
 	~DebProxy();
 
 	template <class T> 
@@ -249,7 +249,20 @@ class LIMACORE_API DebProxy
 	bool isActive() const;
 
  private:
-	AutoMutex *m_lock;
+	mutable AutoMutex *m_lock;
+};
+
+/*------------------------------------------------------------------
+ *  class DebSink
+ *------------------------------------------------------------------*/
+
+class LIMACORE_API DebSink
+{
+ public:
+  	DebSink() {};
+
+	template <class T> 
+	  const DebSink& operator <<(const T&) const {return *this;}
 };
 
 
@@ -405,6 +418,12 @@ inline DebProxy::DebProxy(DebObj *deb_obj, DebType type, ConstStr file_name,
 	m_lock = new AutoMutex(lock);
 }
 
+inline DebProxy::DebProxy(const DebProxy& p)
+	: m_lock(p.m_lock)
+{
+	p.m_lock = NULL;
+}
+
 inline DebProxy::~DebProxy()
 {
 	if (!m_lock)
@@ -498,11 +517,6 @@ inline DebProxy DebObj::write(DebType type, ConstStr file_name, int line_nr)
 #define DEB_GLOBAL(mod)							\
 	DEB_GLOBAL_NAMESPC(mod, NULL)
 
-#define DEB_GLOBAL_FUNCT()						\
-	DebObj deb(getDebParams(), false, __FUNCTION__,			\
-		   NULL, __FILE__, __LINE__)
-
-
 #define DEB_CLASS_NAMESPC(mod, class_name, name_space)			\
   private:								\
 	static DebParams& getDebParams()				\
@@ -529,6 +543,12 @@ inline DebProxy DebObj::write(DebType type, ConstStr file_name, int line_nr)
 
 #define DEB_CLASS(mod, class_name)					\
 	DEB_CLASS_NAMESPC(mod, class_name, NULL)
+
+#ifndef NO_LIMA_DEBUG
+
+#define DEB_GLOBAL_FUNCT()						\
+	DebObj deb(getDebParams(), false, __FUNCTION__,			\
+		   NULL, __FILE__, __LINE__)
 
 #define DEB_CONSTRUCTOR()						\
 	DEB_MEMBER_FUNCT()
@@ -581,6 +601,37 @@ inline DebProxy DebObj::write(DebType type, ConstStr file_name, int line_nr)
 #define DEB_OBJ_NAME(o) \
 	((o)->getDebObjName())
 
+#else //NO_LIMA_DEBUG
+
+#define DEB_GLOBAL_FUNCT() DebSink deb
+#define DEB_CONSTRUCTOR() DebSink deb
+#define DEB_DESTRUCTOR()  DebSink deb
+#define DEB_MEMBER_FUNCT() DebSink deb
+
+#define DEB_FROM_PTR(deb_ptr) DebSink deb
+#define DEB_STATIC_FUNCT() DEB_GLOBAL_FUNCT()
+#define DEB_SET_OBJ_NAME(n)
+
+#define DEB_MSG(type) 	deb
+#define DEB_FATAL()	deb
+#define DEB_ERROR()	deb
+#define DEB_WARNING()	deb
+#define DEB_TRACE()	deb
+#define DEB_PARAM()	deb
+#define DEB_RETURN()	deb
+#define DEB_ALWAYS()	deb
+#define DEB_HEX(x)				""
+#define DEB_VAR1(v1)				""
+#define DEB_VAR2(v1, v2)			""
+#define DEB_VAR3(v1, v2, v3)			""
+#define DEB_VAR4(v1, v2, v3, v4)		""
+#define DEB_VAR5(v1, v2, v3, v4, v5)		""
+#define DEB_VAR6(v1, v2, v3, v4, v5, v6)	""
+#define DEB_VAR7(v1, v2, v3, v4, v5, v6, v7)	""
+
+#define DEB_OBJ_NAME(o)
+
+#endif //NO_LIMA_DEBUG
 } // namespace lima
 
 #endif // DEBUG_H

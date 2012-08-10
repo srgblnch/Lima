@@ -22,6 +22,36 @@
 
 include ../config.inc
 
+
+############################
+# HELPER MACROS
+############################
+
+full-version	= $(shell cat $(1))
+minor-version	= $(shell cat $(1) | cut -f1-2 -d.)
+ifneq ($(LINK_STRICT_VERSION),0)
+link-version	= $(call full-version,$(1))
+else
+link-version	= $(call minor-version,$(1))
+endif
+
+lib-base        = liblima$(1).so
+lib-full        = $(call lib-base,$(1)).$(shell cat $(2))
+lib-minor       = $(call lib-base,$(1)).$(call minor-version,$(2))
+lib-link	= $(call lib-base,$(1)).$(call link-version,$(2))
+lib-flags	= -fPIC -Wl,-soname,$(call lib-link,$(1),$(2))
+
+# 1=name, 2=ver-file 3=flags 4=deps, 5=target, 6=objs
+compile-lib	= \
+	$(CXX) -shared -o $(5) $(3) $(call lib-flags,$(1),$(2)) $(6) $(4)
+
+create-links	= \
+	rm -f $(call lib-minor,$(1),$(2)) && \
+	rm -f $(call lib-base,$(1),$(2)) && \
+	ln -s $(call lib-full,$(1),$(2))  $(call lib-minor,$(1),$(2)) && \
+	ln -s $(call lib-minor,$(1),$(2)) $(call lib-base,$(1),$(2))
+
+
 ############################
 # LIMA - CORE
 ############################
@@ -34,30 +64,27 @@ CORE_LDFLAGS += -L../third-party/CBFLib/lib
 CORE_LDLIBS += -lcbf
 endif
 
+ifneq ($(COMPILE_FITS_SAVING),0)
+CORE_LDFLAGS += -L../third-party/cfitsio/lib -L../third-party/CCfits/.libs
+CORE_LDLIBS += -lCCfits -lcfitsio
+endif
+
 ifneq ($(COMPILE_CORE),0)
 
-name		:= core
+core-name	:= core
 core-objs	:= ../common/src/Common.o \
 		   ../hardware/src/Hw.o \
 		   ../control/src/Ct.o
-version-file	:= ../common/VERSION
+core-ver	:= ../common/VERSION
 core-flags	:= $(CORE_LDFLAGS)
 core-deps	:= $(CORE_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(core-name),$(core-ver)): $(core-objs)
+	$(call compile-lib,$(core-name),$(core-ver),\
+			   $(core-flags),$(core-deps),$@,$+)
+	$(call create-links,$(core-name),$(core-ver))
 
-core-base	:= liblima$(name).so
-core-full	:= $(core-base).$(full-version)
-core-maj	:= $(core-base).$(maj-version)
-core-flags	+= -fPIC -Wl,-soname,$(core-maj)
-
-$(core-full):		$(core-objs)
-	$(CXX) -shared -o $@ $(core-flags) $+ $(core-deps)
-	rm -f $(core-maj);  ln -s $(core-full) $(core-maj)
-	rm -f $(core-base); ln -s $(core-maj)  $(core-base)
-
-build_targets := $(core-full)
+build_targets	:= $(call lib-full,$(core-name),$(core-ver))
 
 endif
 
@@ -71,26 +98,18 @@ LDLIBS		:= $(CORE_LDLIBS) -llimacore
 
 ifneq ($(COMPILE_SIMULATOR),0)
 
-name		:= simulator
+simu-name	:= simulator
 simu-objs	:= ../camera/simulator/src/Simu.o
-version-file	:= ../camera/simulator/VERSION
+simu-ver	:= ../camera/simulator/VERSION
 simu-flags	:= $(LDFLAGS)
 simu-deps	:= $(LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(simu-name),$(simu-ver)): $(simu-objs)
+	$(call compile-lib,$(simu-name),$(simu-ver),\
+			   $(simu-flags),$(simu-deps),$@,$+)
+	$(call create-links,$(simu-name),$(simu-ver))
 
-simu-base	:= liblima$(name).so
-simu-full	:= $(simu-base).$(full-version)
-simu-maj	:= $(simu-base).$(maj-version)
-simu-flags	+= -fPIC -Wl,-soname,$(simu-maj)
-
-$(simu-full):		$(simu-objs)
-	$(CXX) -shared -o $@ $(simu-flags) $+ $(simu-deps)
-	rm -f $(simu-maj);  ln -s $(simu-full) $(simu-maj)
-	rm -f $(simu-base); ln -s $(simu-maj)  $(simu-base)
-
-build_targets += $(simu-full)
+build_targets	+= $(call lib-full,$(simu-name),$(simu-ver))
 
 endif
 
@@ -106,26 +125,18 @@ include ../camera/common/espia/include/espia.inc
 ESPIA_LDFLAGS	:= $(LDFLAGS) -L$(ESPIA_DRV_LIB)
 ESPIA_LDLIBS	:= $(LDLIBS) -lespia
 
-name		:= espia
+espia-name	:= espia
 espia-objs	:= ../camera/common/espia/src/Espia.o
-version-file	:= ../camera/common/espia/VERSION
+espia-ver	:= ../camera/common/espia/VERSION
 espia-flags	:= $(ESPIA_LDFLAGS)
 espia-deps	:= $(ESPIA_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(espia-name),$(espia-ver)): $(espia-objs)
+	$(call compile-lib,$(espia-name),$(espia-ver),\
+			   $(espia-flags),$(espia-deps),$@,$+)
+	$(call create-links,$(espia-name),$(espia-ver))
 
-espia-base	:= liblima$(name).so
-espia-full	:= $(espia-base).$(full-version)
-espia-maj	:= $(espia-base).$(maj-version)
-espia-flags	+= -fPIC -Wl,-soname,$(espia-maj)
-
-$(espia-full):		$(espia-objs)
-	$(CXX) -shared -o $@ $(espia-flags) $+ $(espia-deps)
-	rm -f $(espia-maj);  ln -s $(espia-full) $(espia-maj)
-	rm -f $(espia-base); ln -s $(espia-maj)  $(espia-base)
-
-build_targets += $(espia-full)
+build_targets	+= $(call lib-full,$(espia-name),$(espia-ver))
 
 endif
 
@@ -139,26 +150,18 @@ ifneq ($(COMPILE_FRELON),0)
 FRELON_LDFLAGS	:= $(ESPIA_LDFLAGS) -L.
 FRELON_LDLIBS	:= $(ESPIA_LDLIBS) -llimaespia
 
-name		:= frelon
+frelon-name	:= frelon
 frelon-objs	:= ../camera/frelon/src/Frelon.o
-version-file	:= ../camera/frelon/VERSION
+frelon-ver	:= ../camera/frelon/VERSION
 frelon-flags	:= $(FRELON_LDFLAGS)
 frelon-deps	:= $(FRELON_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(frelon-name),$(frelon-ver)): $(frelon-objs)
+	$(call compile-lib,$(frelon-name),$(frelon-ver),\
+			   $(frelon-flags),$(frelon-deps),$@,$+)
+	$(call create-links,$(frelon-name),$(frelon-ver))
 
-frelon-base	:= liblima$(name).so
-frelon-full	:= $(frelon-base).$(full-version)
-frelon-maj	:= $(frelon-base).$(maj-version)
-frelon-flags	+= -fPIC -Wl,-soname,$(frelon-maj)
-
-$(frelon-full):		$(frelon-objs)
-	$(CXX) -shared -o $@ $(frelon-flags) $+ $(frelon-deps)
-	rm -f $(frelon-maj);  ln -s $(frelon-full) $(frelon-maj)
-	rm -f $(frelon-base); ln -s $(frelon-maj)  $(frelon-base)
-
-build_targets += $(frelon-full)
+build_targets	+= $(call lib-full,$(frelon-name),$(frelon-ver))
 
 endif
 
@@ -172,26 +175,18 @@ ifneq ($(COMPILE_MAXIPIX),0)
 MAXIPIX_LDFLAGS	:= $(ESPIA_LDFLAGS) -L.
 MAXIPIX_LDLIBS	:= $(ESPIA_LDLIBS) -llimaespia
 
-name		:= maxipix
+maxipix-name	:= maxipix
 maxipix-objs	:= ../camera/maxipix/src/Maxipix.o
-version-file	:= ../camera/maxipix/VERSION
+maxipix-ver	:= ../camera/maxipix/VERSION
 maxipix-flags	:= $(MAXIPIX_LDFLAGS)
 maxipix-deps	:= $(MAXIPIX_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(maxipix-name),$(maxipix-ver)): $(maxipix-objs)
+	$(call compile-lib,$(maxipix-name),$(maxipix-ver),\
+			   $(maxipix-flags),$(maxipix-deps),$@,$+)
+	$(call create-links,$(maxipix-name),$(maxipix-ver))
 
-maxipix-base	:= liblima$(name).so
-maxipix-full	:= $(maxipix-base).$(full-version)
-maxipix-maj	:= $(maxipix-base).$(maj-version)
-maxipix-flags	+= -fPIC -Wl,-soname,$(maxipix-maj)
-
-$(maxipix-full):		$(maxipix-objs)
-	$(CXX) -shared -o $@ $(maxipix-flags) $+ $(maxipix-deps)
-	rm -f $(maxipix-maj);  ln -s $(maxipix-full) $(maxipix-maj)
-	rm -f $(maxipix-base); ln -s $(maxipix-maj)  $(maxipix-base)
-
-build_targets += $(maxipix-full)
+build_targets	+= $(call lib-full,$(maxipix-name),$(maxipix-ver))
 
 endif
 
@@ -204,24 +199,19 @@ ifneq ($(COMPILE_BASLER),0)
 BASLER_LDFLAGS	:= -L. -L/opt/pylon/lib -L/opt/pylon/lib64
 BASLER_LDLIBS	:= -lpylongigesupp
 
-name		:= basler
+basler-name	:= basler
 basler-objs	:= ../camera/basler/src/Basler.o
-version-file	:= ../camera/basler/VERSION
+basler-ver	:= ../camera/basler/VERSION
 basler-flags	:= $(BASLER_LDFLAGS)
 basler-deps	:= $(BASLER_LDLIBS)
-basler-base	:= liblima$(name).so
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
-basler-full	:= $(basler-base).$(full-version)
-basler-maj	:= $(basler-base).$(maj-version)
-basler-flags	+= -fPIC -Wl,-soname,$(basler-maj)
 
-$(basler-full):		$(basler-objs)
-	$(CXX) -shared -o $@ $(basler-flags) $+ $(basler-deps)
-	rm -f $(basler-maj);  ln -s $(basler-full) $(basler-maj)
-	rm -f $(basler-base); ln -s $(basler-maj)  $(basler-base)
+$(call lib-full,$(basler-name),$(basler-ver)): $(basler-objs)
+	$(call compile-lib,$(basler-name),$(basler-ver),\
+			   $(basler-flags),$(basler-deps),$@,$+)
+	$(call create-links,$(basler-name),$(basler-ver))
 
-build_targets += $(basler-full)
+build_targets	+= $(call lib-full,$(basler-name),$(basler-ver))
+
 endif
 
 ############################
@@ -233,24 +223,19 @@ ifneq ($(COMPILE_UEYE),0)
 UEYE_LDFLAGS	:=
 UEYE_LDLIBS	:= -lueye_api
 
-name		:= ueye
+ueye-name	:= ueye
 ueye-objs	:= ../camera/ueye/src/Ueye.o
-version-file	:= ../camera/ueye/VERSION
+ueye-ver	:= ../camera/ueye/VERSION
 ueye-flags	:= $(UEYE_LDFLAGS)
 ueye-deps	:= $(UEYE_LDLIBS)
-ueye-base	:= liblima$(name).so
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
-ueye-full	:= $(ueye-base).$(full-version)
-ueye-maj	:= $(ueye-base).$(maj-version)
-ueye-flags	+= -fPIC -Wl,-soname,$(ueye-maj)
 
-$(ueye-full):		$(ueye-objs)
-	$(CXX) -shared -o $@ $(ueye-flags) $+ $(ueye-deps)
-	rm -f $(ueye-maj);  ln -s $(ueye-full) $(ueye-maj)
-	rm -f $(ueye-base); ln -s $(ueye-maj)  $(ueye-base)
+$(call lib-full,$(ueye-name),$(ueye-ver)): $(ueye-objs)
+	$(call compile-lib,$(ueye-name),$(ueye-ver),\
+			   $(ueye-flags),$(ueye-deps),$@,$+)
+	$(call create-links,$(ueye-name),$(ueye-ver))
 
-build_targets += $(ueye-full)
+build_targets	+= $(call lib-full,$(ueye-name),$(ueye-ver))
+
 endif
 
 ############################
@@ -263,28 +248,24 @@ PROCESSOR_TYPE := $(shell uname -i)
 ifeq ($(PROCESSOR_TYPE),i386)
 PROSILICA_LDFLAGS	:= -L. -L../camera/prosilica/sdk/bin/x86
 else
-PROSILICA_LDFLAGS	:= -L. -L../camera/prosilica/sdk/bin/x64 -L../camera/prosilica/sdk/bin/x86
+PROSILICA_LDFLAGS	:= -L. -L../camera/prosilica/sdk/bin/x64 \
+			   -L../camera/prosilica/sdk/bin/x86
 endif
 PROSILICA_LDLIBS	:= -lPvAPI
 
-name		:= prosilica
+prosilica-name	:= prosilica
 prosilica-objs	:= ../camera/prosilica/src/Prosilica.o
-version-file	:= ../camera/prosilica/VERSION
+prosilica-ver	:= ../camera/prosilica/VERSION
 prosilica-flags	:= $(PROSILICA_LDFLAGS)
 prosilica-deps	:= $(PROSILICA_LDLIBS)
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
-prosilica-base	:= liblima$(name).so
-prosilica-full	:= $(prosilica-base).$(full-version)
-prosilica-maj	:= $(prosilica-base).$(maj-version)
-prosilica-flags	+= -fPIC -Wl,-soname,$(prosilica-maj)
 
-$(prosilica-full):		$(prosilica-objs)
-	$(CXX) -shared -o $@ $(prosilica-flags) $+ $(prosilica-deps)
-	rm -f $(prosilica-maj);  ln -s $(prosilica-full) $(prosilica-maj)
-	rm -f $(prosilica-base); ln -s $(prosilica-maj)  $(prosilica-base)
+$(call lib-full,$(prosilica-name),$(prosilica-ver)): $(prosilica-objs)
+	$(call compile-lib,$(prosilica-name),$(prosilica-ver),\
+			   $(prosilica-flags),$(prosilica-deps),$@,$+)
+	$(call create-links,$(prosilica-name),$(prosilica-ver))
 
-build_targets += $(prosilica-full)
+build_targets	+= $(call lib-full,$(prosilica-name),$(prosilica-ver))
+
 endif
 
 
@@ -295,28 +276,22 @@ endif
 ifneq ($(COMPILE_ROPERSCIENTIFIC),0)
 
 ROPERSCIENTIFIC_LDLIBS	:= -lpvcam -lraw1394
-name		:= roperscientific
-roperscientific-objs	:= ../camera/roperscientific/src/RoperScientific.o
-version-file	:= ../camera/roperscientific/VERSION
-roperscientific-flags	:= $(LDFLAGS)
-roperscientific-deps	:= $(ROPERSCIENTIFIC_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+ropersci-name	:= roperscientific
+ropersci-objs	:= ../camera/roperscientific/src/RoperScientific.o
+ropersci-ver	:= ../camera/roperscientific/VERSION
+ropersci-flags	:= $(LDFLAGS)
+ropersci-deps	:= $(ROPERSCIENTIFIC_LDLIBS)
 
-roperscientific-base	:= liblima$(name).so
-roperscientific-full	:= $(roperscientific-base).$(full-version)
-roperscientific-maj	:= $(roperscientific-base).$(maj-version)
-roperscientific-flags	+= -fPIC -Wl,-soname,$(roperscientific-maj)
+$(call lib-full,$(ropersci-name),$(ropersci-ver)): $(ropersci-objs)
+	$(call compile-lib,$(ropersci-name),$(ropersci-ver),\
+			   $(ropersci-flags),$(ropersci-deps),$@,$+)
+	$(call create-links,$(ropersci-name),$(ropersci-ver))
 
-$(roperscientific-full):		$(roperscientific-objs)
-	$(CXX) -shared -o $@ $(roperscientific-flags) $+ $(roperscientific-deps)
-	rm -f $(roperscientific-maj);  ln -s $(roperscientific-full) $(roperscientific-maj)
-	rm -f $(roperscientific-base); ln -s $(roperscientific-maj)  $(roperscientific-base)
-
-build_targets += $(roperscientific-full)
+build_targets	+= $(call lib-full,$(ropersci-name),$(ropersci-ver))
 
 endif
+
 
 ############################
 # LIMA - ADSC
@@ -326,26 +301,19 @@ ifneq ($(COMPILE_ADSC),0)
 
 ADSC_LDFLAGS	:= -L. -L../camera/adsc/sdk/adsc_sources/lib/linux
 ADSC_LDLIBS	:= -lauxlib -ldetcon_th
-name		:= adsc
+
+adsc-name	:= adsc
 adsc-objs	:= ../camera/adsc/src/Adsc.o
-version-file	:= ../camera/adsc/VERSION
+adsc-ver	:= ../camera/adsc/VERSION
 adsc-flags	:= $(ADSC_LDFLAGS)
 adsc-deps	:= $(ADSC_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(adsc-name),$(adsc-ver)): $(adsc-objs)
+	$(call compile-lib,$(adsc-name),$(adsc-ver),\
+			   $(adsc-flags),$(adsc-deps),$@,$+)
+	$(call create-links,$(adsc-name),$(adsc-ver))
 
-adsc-base	:= liblima$(name).so
-adsc-full	:= $(adsc-base).$(full-version)
-adsc-maj	:= $(adsc-base).$(maj-version)
-adsc-flags	+= -fPIC -Wl,-soname,$(adsc-maj)
-
-$(adsc-full):		$(adsc-objs)
-	$(CXX) -shared -o $@ $(adsc-flags) $+ $(adsc-deps)
-	rm -f $(adsc-maj);  ln -s $(adsc-full) $(adsc-maj)
-	rm -f $(adsc-base); ln -s $(adsc-maj)  $(adsc-base)
-
-#build_targets += $(adsc-full)
+#build_targets	+= $(call lib-full,$(adsc-name),$(adsc-ver))
 
 endif
 
@@ -357,28 +325,47 @@ endif
 ifneq ($(COMPILE_MYTHEN),0)
 
 MYTHEN_LDLIBS	:= -lSlsDetector
-name		:= mythen
+
+mythen-name	:= mythen
 mythen-objs	:= ../camera/mythen/src/Mythen.o
-version-file	:= ../camera/mythen/VERSION
+mythen-ver	:= ../camera/mythen/VERSION
 mythen-flags	:= $(LDFLAGS)
 mythen-deps	:= $(MYTHEN_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(mythen-name),$(mythen-ver)): $(mythen-objs)
+	$(call compile-lib,$(mythen-name),$(mythen-ver),\
+			   $(mythen-flags),$(mythen-deps),$@,$+)
+	$(call create-links,$(mythen-name),$(mythen-ver))
 
-mythen-base	:= liblima$(name).so
-mythen-full	:= $(mythen-base).$(full-version)
-mythen-maj	:= $(mythen-base).$(maj-version)
-mythen-flags	+= -fPIC -Wl,-soname,$(mythen-maj)
-
-$(mythen-full):		$(mythen-objs)
-	$(CXX) -shared -o $@ $(mythen-flags) $+ $(mythen-deps)
-	rm -f $(mythen-maj);  ln -s $(mythen-full) $(mythen-maj)
-	rm -f $(mythen-base); ln -s $(mythen-maj)  $(mythen-base)
-
-build_targets += $(mythen-full)
+build_targets	+= $(call lib-full,$(mythen-name),$(mythen-ver))
 
 endif
+
+
+############################
+# LIMA - ANDOR
+############################
+
+ifneq ($(COMPILE_ANDOR),0)
+
+ANDOR_LDFLAGS	:= -L. -L/usr/local/lib
+ANDOR_LDLIBS	:= -landor
+
+andor-name	:= andor
+andor-objs	:= ../camera/andor/src/Andor.o
+andor-ver	:= ../camera/andor/VERSION
+andor-flags	:= $(ANDOR_LDFLAGS)
+andor-deps	:= $(ANDOR_LDLIBS)
+
+$(call lib-full,$(andor-name),$(andor-ver)): $(andor-objs)
+	$(call compile-lib,$(andor-name),$(andor-ver),\
+			   $(andor-flags),$(andor-deps),$@,$+)
+	$(call create-links,$(andor-name),$(andor-ver))
+
+build_targets	+= $(call lib-full,$(andor-name),$(andor-ver))
+
+endif
+
 
 ############################
 # LIMA - MARCCD
@@ -418,27 +405,21 @@ endif
 
 ifneq ($(COMPILE_XPAD),0)
 
-XPAD_LDLIBS	:= 
-name		:= xpad
+XPAD_LDLIBS	:= -L/home/xpix_user/PCI_VALIDATED/trunk/sw/xpci_lib \
+		   -lxpci_lib -L../third-party/yat/lib/i386/static -lyat
+
+xpad-name	:= xpad
 xpad-objs	:= ../camera/xpad/src/Xpad.o
-version-file	:= ../camera/xpad/VERSION
+xpad-ver	:= ../camera/xpad/VERSION
 xpad-flags	:= $(LDFLAGS)
 xpad-deps	:= $(XPAD_LDLIBS)
 
-full-version	:= $(shell cat $(version-file))
-maj-version	:= $(shell echo $(full-version) | cut -f1 -d.)
+$(call lib-full,$(xpad-name),$(xpad-ver)): $(xpad-objs)
+	$(call compile-lib,$(xpad-name),$(xpad-ver),\
+			   $(xpad-flags),$(xpad-deps),$@,$+)
+	$(call create-links,$(xpad-name),$(xpad-ver))
 
-xpad-base	:= liblima$(name).so
-xpad-full	:= $(xpad-base).$(full-version)
-xpad-maj	:= $(xpad-base).$(maj-version)
-xpad-flags	+= -fPIC -Wl,-soname,$(xpad-maj)
-
-$(xpad-full):		$(xpad-objs)
-	$(CXX) -shared -o $@ $(xpad-flags) $+ $(xpad-deps)
-	rm -f $(xpad-maj);  ln -s $(xpad-full) $(xpad-maj)
-	rm -f $(xpad-base); ln -s $(xpad-maj)  $(xpad-base)
-
-#build_targets += $(xpad-full)
+#build_targets	+= $(call lib-full,$(xpad-name),$(xpad-ver))
 
 endif
 

@@ -31,13 +31,17 @@
 #include "LimaCompatibility.h"
 #include "ThreadUtils.h"
 #include "CtControl.h"
+#include "HwSavingCtrlObj.h"
 
 struct Data;
 class TaskEventCallback;
 class SinkTaskBase;
 
 namespace lima {
-
+  /** @brief Saving management
+   *
+   * With this class you manage the image saving in different format
+   */
   class LIMACORE_API CtSaving 
   {
     DEB_CLASS_NAMESPC(DebModControl,"Saving","Control");
@@ -46,41 +50,50 @@ namespace lima {
   public:
     CtSaving(CtControl&);
     ~CtSaving();
-  
+
+    enum ManagedMode
+      {
+	Software,		///< Saving will be managed by Lima Core (Control)
+	Hardware		///< Saving will be managed by Hardware or Camera SDK
+      };
+
     enum FileFormat 
       {
-	RAW,
-	EDF,
-	CBFFormat,
-	NXS,
+	HARDWARE_SPECIFIC = -1,	///< extended hardware format (ADSC,MarCCD...) @see setHardwareFormat
+	RAW,			///< Raw format (no header)
+	EDF,			///< EDF format (Esrf Data Format)
+	CBFFormat,		///< CBF format
+	NXS,			///< Soleil Nexus format
+	FITS,			///< Flexible Image Transport Layer (NOST)
       };
 
     enum SavingMode 
       {
-	Manual,
-	AutoFrame,
-	AutoHeader,
+	Manual,			///< No automatic saving, you should call CtSaving::writeFrame
+	AutoFrame,		///< Save a frame just after it acquisition
+	AutoHeader,		///< Save the frame if header and the data of the frame is available 
       };
 	
     enum OverwritePolicy 
       {
-	Abort,
-	Overwrite,
-	Append,
+	Abort,			///< Abort acquisition if file already exist
+	Overwrite,		///< Overwrite old files
+	Append,			///< Append new data at the end of already existing files
       };	
 
     struct LIMACORE_API Parameters 
     {
-      std::string directory;
-      std::string prefix;
-      std::string suffix;
+      std::string directory;	///< base path where the files will be saved
+      std::string prefix;	///< prefix of the filename
+      std::string suffix;	///< suffix of the filename
       ImageType   imageType;
-      long nextNumber;
-      FileFormat fileFormat;
-      SavingMode savingMode;
-      OverwritePolicy overwritePolicy;
-      std::string indexFormat;
-      long framesPerFile;
+      long nextNumber;		///< next file number
+      FileFormat fileFormat;	///< the saving format (EDF,CBF...)
+      SavingMode savingMode;	///< saving mode (automatic,manual...)
+      OverwritePolicy overwritePolicy; ///< how you the saving react it find existing filename
+      ManagedMode managedMode;	///< two option either harware (manage by SDK,hardware) or software (Lima core)
+      std::string indexFormat;	///< ie: %.4d if you want 4 digits
+      long framesPerFile;	///< the number of images save in one files
       long nbframes;
       
       Parameters();
@@ -111,6 +124,9 @@ namespace lima {
     void setFormat(FileFormat format, int stream_idx=0);
     void getFormat(FileFormat& format, int stream_idx=0) const;
 
+    void getHardwareFormatList(std::list<std::string> &format_list) const;
+    void setHardwareFormat(const std::string &format);
+    void getHardwareFormat(std::string &format) const;
     // --- saving modes
 
     void setSavingMode(SavingMode mode);
@@ -126,6 +142,8 @@ namespace lima {
     void getFramePerFile(unsigned long& frames_per_file, 
 			 int stream_idx=0) const;
     
+    void setManagedMode(ManagedMode mode);
+    void getManagedMode(ManagedMode &mode) const;
     // --- common headers
 
     void resetCommonHeader();
@@ -292,6 +310,8 @@ namespace lima {
     friend class Stream;
 
   private:
+    class	_NewFrameSaveCBK;
+    friend class _NewFrameSaveCBK;
     typedef std::vector<SinkTaskBase *> TaskList;
     typedef std::map<long, long>	FrameCbkCountMap;
     typedef std::map<long, HeaderMap>	FrameHeaderMap;
@@ -312,6 +332,9 @@ namespace lima {
     FrameCbkCountMap		m_nb_compression_cbk;
     int				m_nb_save_cbk;
     TaskEventCallback	       *m_end_cbk;
+    bool			m_has_hwsaving;
+    HwSavingCtrlObj*		m_hwsaving;
+    _NewFrameSaveCBK*		m_new_frame_save_cbk;
 
     Stream& getStream(int stream_idx)
     { bool stream_ok = (stream_idx >= 0) && (stream_idx < m_nb_stream);
@@ -325,6 +348,9 @@ namespace lima {
 
     SavingMode getAcqSavingMode() const
     { return getStream(0).getParameters(Acq).savingMode; }
+
+    ManagedMode getManagedMode() const
+    { return getStream(0).getParameters(Acq).managedMode; }
 
     // --- from control
     void getSaveCounters(int& first_to_save, int& last_to_save)
@@ -352,6 +378,7 @@ namespace lima {
     void _setSavingError(CtControl::ErrorCode);
     void _updateParameters();
     bool _controlIsFault();
+    bool _newFrameWrite(int);
   };
 
   inline std::ostream& operator<<(std::ostream &os,const CtSaving::Parameters &params)

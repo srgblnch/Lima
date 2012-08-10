@@ -56,15 +56,16 @@ public:
 	virtual void   registerFrameCallback(HwFrameCallback& frame_cb) = 0;
 	virtual void unregisterFrameCallback(HwFrameCallback& frame_cb) = 0;
 	
-	class Callback
+	class LIMACORE_API Callback
 	{
 	public:
-	  virtual void map(void *address) = 0;
-	  virtual void release(void *address) = 0;
-	  virtual void releaseAll() = 0;
+		virtual ~Callback();
+		virtual void map(void *address) = 0;
+		virtual void release(void *address) = 0;
+		virtual void releaseAll() = 0;
 	};
 
-	virtual Callback* getBufferCallback() {return NULL;}
+	virtual Callback *getBufferCallback();
 };
  
 } // namespace lima

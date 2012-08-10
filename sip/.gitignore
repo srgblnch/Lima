@@ -19,7 +19,9 @@ marccd
 ueye
 pco
 perkinelmer
+andor
 xpad
+photonicscience
 *.obj
 lima*.exp
 lima*.lib

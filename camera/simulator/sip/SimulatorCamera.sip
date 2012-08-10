@@ -34,7 +34,7 @@ class Camera
 	Camera();
 	~Camera();
 
-	HwBufferCtrlObj* getBufferMgr();
+	HwBufferCtrlObj* getBufferCtrlObj();
 	
 	void startAcq();
 	void stopAcq();
@@ -66,7 +66,8 @@ class Camera
 %MethodCode
 	std::ostringstream str;
 	str << *sipCpp;	
-	sipRes = str.str().c_str();
+	const std::string& tmpString = str.str();
+	sipRes = tmpString.c_str();
 %End
 };
 };

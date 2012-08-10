@@ -40,8 +40,10 @@ modules = [('core',     ['common', 'hardware', 'control']),
 #            ('adsc',       [os.path.join('camera','adsc')]),
            ('mythen',           [os.path.join('camera','mythen')]),
            ('perkinelmer',      [os.path.join('camera','perkinelmer')]),
+           ('andor',      	[os.path.join('camera','andor')]),
 #           ('xpad',             [os.path.join('camera','xpad')]),
            ('marccd',             [os.path.join('camera','marccd')]),
+           ('photonicscience',  [os.path.join('camera','photonicscience')]),
            ]
 
 espiaModules = ['espia', 'frelon', 'maxipix']
@@ -148,6 +150,11 @@ def main():
         elif(modName == 'marccd'):
 	    extraIncludes += ['../../../include/DiffractionImage']
 	    extraIncludes += ['../../third-party/yat/include']
+        elif(modName == 'andor') :
+            extraIncludes += ['/usr/local/include']
+#	elif(modName == 'xpad'):
+#            extraIncludes += ['../../third-party/yat/include','/home/xpix_user/PCI_VALIDATED/trunk/sw/xpci_lib']
+
         extraIncludes += findModuleIncludes(modName)
         
         sipFile = open(sipFileName,"a")

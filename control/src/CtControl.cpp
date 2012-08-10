@@ -33,6 +33,7 @@
 #include "CtShutter.h"
 #include "CtAccumulation.h"
 #include "CtVideo.h"
+#include "CtEvent.h"
 
 #include "SoftOpInternalMgr.h"
 #include "SoftOpExternalMgr.h"
@@ -133,6 +134,7 @@ CtControl::CtControl(HwInterface *hw) :
   m_ct_shutter = new CtShutter(hw);
   m_ct_accumulation = new CtAccumulation(*this);
   m_ct_video = new CtVideo(*this);
+  m_ct_event = new CtEvent(*this);
 
   //Saving
   m_ct_saving= new CtSaving(*this);
@@ -278,6 +280,7 @@ void CtControl::prepareAcq()
   m_base_images_ready.clear();
   m_images_buffer.clear();
   m_ct_video->_prepareAcq();
+  m_ct_event->_prepareAcq();
 }
 
 void CtControl::startAcq()
@@ -696,8 +699,16 @@ void CtControl::newCounterReady(Data&)
 void CtControl::newImageSaved(Data&)
 {
   DEB_MEMBER_FUNCT();
+  CtSaving::ManagedMode savingManagedMode;
+  m_ct_saving->getManagedMode(savingManagedMode);
   AutoMutex aLock(m_cond.mutex());
   ++m_status.ImageCounters.LastImageSaved;
+  if(savingManagedMode == CtSaving::Hardware)
+    {
+      m_status.ImageCounters.LastImageAcquired = m_status.ImageCounters.LastImageSaved;
+      m_status.ImageCounters.LastBaseImageReady = m_status.ImageCounters.LastImageSaved;
+      m_status.ImageCounters.LastImageReady = m_status.ImageCounters.LastImageSaved;
+    }
   aLock.unlock();
 
   if (m_img_status_cb)
@@ -871,6 +882,7 @@ CtBuffer* 		CtControl::buffer() 		{ return m_ct_buffer; }
 CtAccumulation* 	CtControl::accumulation() 	{ return m_ct_accumulation; }
 CtVideo*		CtControl::video()		{ return m_ct_video;}
 CtShutter* 		CtControl::shutter() 		{ return m_ct_shutter; }
+CtEvent* 		CtControl::event()		{ return m_ct_event; }
 
 SoftOpExternalMgr* 	CtControl::externalOperation() 	{return m_op_ext;}
 

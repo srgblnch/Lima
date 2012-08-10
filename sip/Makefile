@@ -70,9 +70,18 @@ ifneq ($(COMPILE_UEYE), 0)
 sip-modules += ueye
 endif
 
+ifneq ($(COMPILE_ANDOR), 0)
+sip-modules += andor
+endif
+
+ifneq ($(COMPILE_XPAD), 0)
+#sip-modules += xpad
+endif
+
 all:	src
 
 src:
+	$(MAKE) -C ../third-party sip
 	for d in $(sip-modules); do \
 		$(MAKE) -C $$d || break; \
 	done

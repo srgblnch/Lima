@@ -23,7 +23,7 @@ import os
 
 root_name = __path__[0]
 
-csadmin_dirs = ['/csadmin/local', '/csadmin/commmon']
+csadmin_dirs = ['/csadmin/local', '/csadmin/common']
 script_get_os = 'scripts/get_compat_os.share'
 get_os = None
 for d in csadmin_dirs:
@@ -33,19 +33,26 @@ for d in csadmin_dirs:
 		break
 if get_os is not None:
         compat_plat = os.popen(get_os).readline().strip()
-        for aux_plat in compat_plat.split():
+	plat = None
+	compat_plat_list = compat_plat.split()
+        for aux_plat in compat_plat_list:
         	if aux_plat.strip() in os.listdir(root_name):
         		plat = aux_plat
         		break
-
+	if plat is None:
+		raise ImportError, ('Could not find Lima directory for %s '
+				    '(nor compat. %s) platform(s) at %s' %
+				    (compat_plat_list[0],
+				     compat_plat_list[1:], root_name))
         lima_plat = os.path.join(root_name, plat)
         __path__.insert(0, lima_plat)
-
-import Core
+	
+# This mandatory variable is systematically overwritten by 'make install'
+os.environ['LIMA_LINK_STRICT_VERSION'] = 'MINOR'
 
 if get_os is not None:
         all_dirs = os.listdir(lima_plat)
-        all_dirs.remove('Lib')
+        all_dirs.remove('lib')
 
         __all__ = all_dirs
         del plat, compat_plat, aux_plat, lima_plat, all_dirs

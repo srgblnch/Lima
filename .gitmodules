@@ -67,3 +67,12 @@
 [submodule "camera/andor"]
 	path = camera/andor
 	url = git://git.epn-campus.eu/repositories/LimaCameraAndor
+[submodule "camera/photonicscience"]
+	path = camera/photonicscience
+	url = git://git.epn-campus.eu/repositories/LimaCameraPhotonicScience
+[submodule "third-party/CCfits"]
+	path = third-party/CCfits
+	url = git://git.epn-campus.eu/repositories/CCfits
+[submodule "third-party/cfitsio"]
+	path = third-party/cfitsio
+	url = git://git.epn-campus.eu/repositories/cfitsio

@@ -47,7 +47,8 @@ using namespace lima;
 %MethodCode
 	std::ostringstream str;
 	str << *sipCpp;	
-	sipRes = str.str().c_str();
+	const std::string& tmpString = str.str();
+	sipRes = tmpString.c_str();
 %End
     };
 
@@ -82,7 +83,8 @@ using namespace lima;
 %MethodCode
 	std::ostringstream str;
 	str << *sipCpp;	
-	sipRes = str.str().c_str();
+	const std::string& tmpString = str.str();
+	sipRes = tmpString.c_str();
 %End
     };
 
@@ -106,6 +108,7 @@ using namespace lima;
     CtShutter* shutter();
     CtAccumulation* accumulation();
     CtVideo* video();
+    CtEvent* event();
 
     SoftOpExternalMgr* externalOperation();
     
