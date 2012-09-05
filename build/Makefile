@@ -325,11 +325,12 @@ endif
 ifneq ($(COMPILE_MYTHEN),0)
 
 MYTHEN_LDLIBS	:= -lSlsDetector
+MYTHEN_LDFLAGS  := $(LDFLAGS) -L../camera/mythen/sdk/slsDetectorSoftware
 
 mythen-name	:= mythen
 mythen-objs	:= ../camera/mythen/src/Mythen.o
 mythen-ver	:= ../camera/mythen/VERSION
-mythen-flags	:= $(LDFLAGS)
+mythen-flags	:= $(MYTHEN_LDFLAGS) 
 mythen-deps	:= $(MYTHEN_LDLIBS)
 
 $(call lib-full,$(mythen-name),$(mythen-ver)): $(mythen-objs)

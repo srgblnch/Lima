@@ -147,6 +147,11 @@ def main():
             extra_cxxflags += ['-DUSE_GIGE']
         elif(modName == 'ueye') and platform.system() != 'Windows':
             extra_cxxflags += ['-D__LINUX__']
+
+	if (modName == 'mythen') :
+            extraIncludes += ['../camera/mythen/sdk/slsDetectorSoftware/mythenDetector',
+                              '../camera/mythen/sdk/slsDetectorSoftware/slsdetector']
+
         elif(modName == 'marccd'):
 	    extraIncludes += ['../../../include/DiffractionImage']
 	    extraIncludes += ['../../third-party/yat/include']
