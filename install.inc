@@ -142,24 +142,10 @@ MYTHEN_FULL_VERSION = $(shell cat camera/mythen/VERSION)
 INSTALL_MYTHEN_VDIR = $(INSTALL_MYTHEN_DIR)/v$(MYTHEN_FULL_VERSION)
 endif
 
-ifneq ($(COMPILE_XPAD), 0)
-INSTALL_XPAD_DIR = $(INSTALL_PLAT_DIR)/XPad
-XPAD_FULL_VERSION = $(shell cat camera/xpad/VERSION)
-XPAD_MAJ_VERSION = $(shell echo $(XPAD_FULL_VERSION) | cut -d. -f1)
-INSTALL_XPAD_VDIR = $(INSTALL_XPAD_DIR)/v$(XPAD_FULL_VERSION)
-endif
-
 ifneq ($(COMPILE_UEYE), 0)
 INSTALL_UEYE_DIR = $(INSTALL_PLAT_DIR)/Ueye
 UEYE_FULL_VERSION = $(shell cat camera/ueye/VERSION)
 INSTALL_UEYE_VDIR = $(INSTALL_UEYE_DIR)/v$(UEYE_FULL_VERSION)
-endif
-
-ifneq ($(COMPILE_MARCCD), 0)
-INSTALL_MARCCD_DIR = $(INSTALL_PLAT_DIR)/Marccd
-MARCCD_FULL_VERSION = $(shell cat camera/marccd/VERSION)
-MARCCD_MAJ_VERSION = $(shell echo $(MARCCD_FULL_VERSION) | cut -d. -f1)
-INSTALL_MARCCD_VDIR = $(INSTALL_MARCCD_DIR)/v$(MARCCD_FULL_VERSION)
 endif
 
 ifneq ($(COMPILE_ANDOR), 0)
@@ -172,6 +158,13 @@ ifneq ($(COMPILE_XPAD), 0)
 INSTALL_XPAD_DIR = $(INSTALL_PLAT_DIR)/Xpad
 XPAD_FULL_VERSION = $(shell cat camera/xpad/VERSION)
 INSTALL_XPAD_VDIR = $(INSTALL_XPAD_DIR)/v$(XPAD_FULL_VERSION)
+endif
+
+ifneq ($(COMPILE_MARCCD), 0)
+INSTALL_MARCCD_DIR = $(INSTALL_PLAT_DIR)/Marccd
+MARCCD_FULL_VERSION = $(shell cat camera/marccd/VERSION)
+MARCCD_MAJ_VERSION = $(shell echo $(MARCCD_FULL_VERSION) | cut -d. -f1)
+INSTALL_MARCCD_VDIR = $(INSTALL_MARCCD_DIR)/v$(MARCCD_FULL_VERSION)
 endif
 
 ifneq ($(COMPILE_SPS_IMAGE),0)
@@ -369,6 +362,16 @@ ifneq ($(COMPILE_UEYE), 0)
 	cp camera/ueye/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 
+ifneq ($(COMPILE_ANDOR), 0)
+	mkdir -p $(INSTALL_ANDOR_VDIR)
+	cp camera/andor/python/__init__.py $(INSTALL_ANDOR_DIR)
+	$(call install_core_dep,camera/andor,$(INSTALL_ANDOR_VDIR))
+	rm -rf $(INSTALL_LIB_DIR)/liblimaandor.so*
+	cp -d build/liblimaandor.so* $(INSTALL_LIB_DIR)
+	cp sip/andor/limaandor.so $(INSTALL_ANDOR_VDIR)
+	cp camera/andor/include/*.h $(INSTALL_INCLUDE_DIR)
+endif
+
 ifneq ($(COMPILE_XPAD), 0)
 	mkdir -p $(INSTALL_XPAD_VDIR)
 	cp camera/xpad/python/__init__.py $(INSTALL_XPAD_DIR)
@@ -393,14 +396,4 @@ ifneq ($(COMPILE_MARCCD), 0)
 	cp camera/marccd/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 	python -m compileall $(INSTALL_LIMA_DIR)
-
-ifneq ($(COMPILE_ANDOR), 0)
-	mkdir -p $(INSTALL_ANDOR_VDIR)
-	cp camera/andor/python/__init__.py $(INSTALL_ANDOR_DIR)
-	$(call install_core_dep,camera/andor,$(INSTALL_ANDOR_VDIR))
-	rm -rf $(INSTALL_LIB_DIR)/liblimaandor.so*
-	cp -d build/liblimaandor.so* $(INSTALL_LIB_DIR)
-	cp sip/andor/limaandor.so $(INSTALL_ANDOR_VDIR)
-	cp camera/andor/include/*.h $(INSTALL_INCLUDE_DIR)
-endif
 
