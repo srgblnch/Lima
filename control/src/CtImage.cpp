@@ -197,8 +197,10 @@ CtHwBinRoiFlip::CtHwBinRoiFlip(HwInterface *hw, CtSwBinRoiFlip *sw_bin_roi, Size
 	m_has_roi= hw->getHwCtrlObj(m_hw_roi);
 	m_has_flip= hw->getHwCtrlObj(m_hw_flip);
 
-	if (m_has_bin)
+	if (m_has_bin) {
+		m_hw_bin->checkBin(m_bin);
 		m_hw_bin->setBin(m_bin);
+	}
 	if (m_has_roi)
 		m_hw_roi->setRoi(m_set_roi);
 
@@ -245,8 +247,7 @@ void CtHwBinRoiFlip::setBin(Bin& bin, bool round)
 	}
 	else {
 		Bin set_bin= bin;
-		if (!set_bin.isOne())
-			m_hw_bin->checkBin(set_bin);
+		m_hw_bin->checkBin(set_bin);
 		if ((!round)&&(set_bin!=bin))
 			throw LIMA_CTL_EXC(InvalidValue, "Given hardware binning not possible");
 		if (set_bin != m_bin) {
