@@ -149,8 +149,11 @@ def main():
             extra_cxxflags += ['-D__LINUX__']
 
 	if (modName == 'mythen') :
-            extraIncludes += ['../camera/mythen/sdk/slsDetectorSoftware/mythenDetector',
-                              '../camera/mythen/sdk/slsDetectorSoftware/slsdetector']
+            extraIncludes += ['../../camera/mythen/sdk/slsDetectorSoftware/multiSlsDetector',
+                              '../../camera/mythen/sdk/slsDetectorSoftware/slsDetector',
+                              '../../camera/mythen/sdk/slsDetectorSoftware/MySocketTCP',
+                              '../../camera/mythen/sdk/slsDetectorSoftware/slsDetectorAnalysis',
+                              '../../camera/mythen/sdk/slsDetectorSoftware/commonFiles',]
 
         elif(modName == 'marccd'):
 	    extraIncludes += ['../../../include/DiffractionImage']
