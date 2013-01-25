@@ -9,7 +9,7 @@
 	url = git://github.com/esrf-bliss/Processlib.git
 [submodule "camera/basler"]
 	path = camera/basler
-	url = git://github.com/esrf-bliss/Lima-camera-basler
+	url = git@github.com:srgblnch/Lima-camera-basler.git
 [submodule "applications/spec"]
 	path = applications/spec
 	url = git://github.com/esrf-bliss/Lima-spec
