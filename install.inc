@@ -157,6 +157,12 @@ MARCCD_FULL_VERSION = $(shell cat camera/marccd/VERSION)
 INSTALL_MARCCD_VDIR = $(INSTALL_MARCCD_DIR)/v$(MARCCD_FULL_VERSION)
 endif
 
+ifneq ($(COMPILE_POINTGREY), 0)
+INSTALL_POINTGREY_DIR = $(INSTALL_PLAT_DIR)/PointGrey
+POINTGREY_FULL_VERSION = $(shell cat camera/pointgrey/VERSION)
+INSTALL_POINTGREY_VDIR = $(INSTALL_POINTGREY_DIR)/v$(POINTGREY_FULL_VERSION)
+endif
+
 ifneq ($(COMPILE_SPS_IMAGE),0)
 INSTALL_CONFIG_DEFINES += -DWITH_SPS_IMAGE
 endif
@@ -175,6 +181,10 @@ INSTALL_CONFIG_DEFINES += -DWITH_FITS_SAVING
 INSTALL_DEPS += cfitsio.install CCfits.install
 endif
 
+ifneq ($(COMPILE_CONFIG_CONTEXT),0)
+INSTALL_CONFIG_DEFINES += -DWITH_CONFIG_CONTEXT
+INSTALL_DEPS += libconfig.install
+endif
 ##################
 #  INSTALL DEPS  #
 ##################
@@ -194,6 +204,9 @@ cfitsio.install:
 
 CCfits.install:
 	$(MAKE) -C third-party CCfits.install
+
+libconfig.install:
+	$(MAKE) -C third-party libconfig.install
 
 ##################
 # INSTALL TARGET #
@@ -270,7 +283,9 @@ ifneq ($(COMPILE_PILATUS), 0)
 	mkdir -p $(INSTALL_PILATUS_VDIR)
 	cp camera/pilatus/python/__init__.py $(INSTALL_PILATUS_DIR)
 	$(call install_core_dep,$(INSTALL_PILATUS_VDIR))
-	cp camera/pilatus/python/*.py $(INSTALL_PILATUS_VDIR)
+	rm -rf $(INSTALL_LIB_DIR)/liblimapilatus.so*
+	cp -d build/liblimapilatus.so* $(INSTALL_LIB_DIR)
+	cp sip/pilatus/limapilatus.so $(INSTALL_PILATUS_VDIR)
 	cp camera/pilatus/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 ifneq ($(COMPILE_BASLER), 0)
@@ -342,7 +357,6 @@ ifneq ($(COMPILE_UEYE), 0)
 	mkdir -p $(INSTALL_UEYE_VDIR)
 	cp camera/ueye/python/__init__.py $(INSTALL_UEYE_DIR)
 	$(call install_core_dep,$(INSTALL_UEYE_VDIR))
-	cp camera/ueye/python/CORE_VERSION
 	rm -rf $(INSTALL_LIB_DIR)/liblimaueye.so*
 	cp -d build/liblimaueye.so* $(INSTALL_LIB_DIR)
 	cp sip/ueye/limaueye.so $(INSTALL_UEYE_VDIR)
@@ -377,5 +391,15 @@ ifneq ($(COMPILE_MARCCD), 0)
 	cp -d third-party/yat/src/.libs/libyat.so* $(INSTALL_LIB_DIR)
 	cp sip/marccd/limamarccd.so $(INSTALL_MARCCD_VDIR)
 	cp camera/marccd/include/*.h $(INSTALL_INCLUDE_DIR)
+endif
+
+ifneq ($(COMPILE_POINTGREY), 0)
+	mkdir -p $(INSTALL_POINTGREY_VDIR)
+	cp camera/pointgrey/python/__init__.py $(INSTALL_POINTGREY_DIR)
+	$(call install_core_dep,$(INSTALL_POINTGREY_VDIR))
+	rm -rf $(INSTALL_LIB_DIR)/liblimapointgrey.so*
+	cp -d build/liblimapointgrey.so* $(INSTALL_LIB_DIR)
+	cp sip/pointgrey/limapointgrey.so $(INSTALL_POINTGREY_VDIR)
+	cp camera/pointgrey/include/*.h $(INSTALL_INCLUDE_DIR)
 endif
 

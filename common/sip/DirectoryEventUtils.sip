@@ -19,73 +19,39 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
-#include "HwCap.h"
 
-namespace lima
+%If (POSIX_PLATFORM)
+class DirectoryEvent
 {
+%TypeHeaderCode
+#include <DirectoryEventUtils.h>
+using namespace lima;
+%End
 
+public:
+  struct Parameters
+  {
+    std::string watch_path;
+    std::string file_pattern;
+    int	  next_file_number_expected;
+  };
+  class Callback
+  {
+  public:
+    virtual void prepare(const DirectoryEvent::Parameters &parameters);
+    virtual bool nextFileExpected(int file_number,
+				  const char *full_path,
+				  int &next_file_number_expected /In,Out/) throw() = 0;
+    virtual bool newFile(int file_number,const char *full_path) throw() = 0;
+  };
 
-HwCap::Type HwCap::getTypeFromCtrlObj(HwDetInfoCtrlObj *p)
-{
-	return DetInfo;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwBufferCtrlObj *p)
-{
-	return Buffer;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwSyncCtrlObj *p)
-{
-	return Sync;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwBinCtrlObj *p)
-{
-	return Bin;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwRoiCtrlObj *p)
-{
-	return Roi;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwFlipCtrlObj *p)
-{
-	return Flip;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwShutterCtrlObj *p)
-{
-	return Shutter;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwVideoCtrlObj *p)
-{
-	return Video;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwEventCtrlObj *p)
-{
-	return Event;
-}
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwSavingCtrlObj*)
-{
-	return Saving;
-}
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwConfigCtrlObj*)
-{
-	return Config;
-}
-
-} // namespace lima
+  DirectoryEvent(bool local,Callback&);
+  ~DirectoryEvent();
+    
+  void prepare(const Parameters&);
+  void start();
+  void stop();
+  bool isStopped() const;
+  int  getNextFileNumberExpected() const;
+};
+%End

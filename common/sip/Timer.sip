@@ -19,73 +19,31 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
-#include "HwCap.h"
 
-namespace lima
+%If (POSIX_PLATFORM)
+class Timer
 {
+%TypeHeaderCode
+#include <Timer.h>
+%End
 
+public:
+  enum Stat {DOWN,UP,RISING_EDGE,FALLING_EDGE};
+  class Callback
+  {
+  protected:
+    virtual void start();
+    virtual void risingEdge();
+    virtual void fallingEdge();
+    virtual void end();
+  };
 
-HwCap::Type HwCap::getTypeFromCtrlObj(HwDetInfoCtrlObj *p)
-{
-	return DetInfo;
-}
+  Timer(Timer::Callback* = NULL);
+  ~Timer();
 
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwBufferCtrlObj *p)
-{
-	return Buffer;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwSyncCtrlObj *p)
-{
-	return Sync;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwBinCtrlObj *p)
-{
-	return Bin;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwRoiCtrlObj *p)
-{
-	return Roi;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwFlipCtrlObj *p)
-{
-	return Flip;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwShutterCtrlObj *p)
-{
-	return Shutter;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwVideoCtrlObj *p)
-{
-	return Video;
-}
-
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwEventCtrlObj *p)
-{
-	return Event;
-}
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwSavingCtrlObj*)
-{
-	return Saving;
-}
-
-HwCap::Type HwCap::getTypeFromCtrlObj(HwConfigCtrlObj*)
-{
-	return Config;
-}
-
-} // namespace lima
+  void delayStart(double delay,double uptime,
+		  int nb_iter = 1,double latency = 0.);
+  void start(double uptime,int nb_iter = 1,double latency = 0.);
+  void stop();
+};
+%End
