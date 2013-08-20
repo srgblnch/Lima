@@ -26,7 +26,7 @@ module2Installfiles = {
 			 ('camera/photonicscience/sdk/ImageStar4022_v1.7',''),
 			 ('sip/photonicscience/limaphotonicscience.pyd','Lima')],
     'simulator' : [('camera/simulator/python/Simulator.py','Lima'),
-                   ('build/msvc/9.0/LibSimulator/Release/liblimasimulator.dll','Lima'),
+                   ('camera/simulator/build/msvc/9.0/LibSimulator/Release/liblimasimulator.dll','Lima'),
                    ('sip/simulator/limasimulator.pyd','Lima')],
     'basler' : [('camera/basler/python/Basler.py','Lima'),
                    ('camera/basler/build/msvc/9.0/LibBasler/Release/liblimabasler.dll','Lima'),
@@ -103,7 +103,8 @@ if __name__ == '__main__':
                     module_list.append(key)
             module_list += option.module_list
             module_list += ["core"]
-            
+            module_list += ["tango-core"]
+
         for moduleName in set(module_list) :
             filesList = module2Installfiles.get(moduleName,None)
             if filesList:

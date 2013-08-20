@@ -404,12 +404,7 @@ void CtControl::getStatus(Status& status) const
   if(aHwStatus.acq == AcqFault)
     status.AcquisitionStatus = AcqFault;
   else if(status.AcquisitionStatus == AcqReady)
-    {
-      HwInterface::Status aHwStatus;
-      m_hw->getStatus(aHwStatus);
-      DEB_TRACE() << DEB_VAR1(aHwStatus);
-      status.AcquisitionStatus = aHwStatus.acq;
-    }
+    status.AcquisitionStatus = aHwStatus.acq;
 }
 
 /** @brief aborts an acquisiton from a callback thread: it's safe to call 
@@ -962,7 +957,9 @@ CtAccumulation* 	CtControl::accumulation() 	{ return m_ct_accumulation; }
 CtVideo*		CtControl::video()		{ return m_ct_video;}
 CtShutter* 		CtControl::shutter() 		{ return m_ct_shutter; }
 CtEvent* 		CtControl::event()		{ return m_ct_event; }
+#ifdef WITH_CONFIG
 CtConfig*		CtControl::config()		{ return m_ct_config; }
+#endif
 
 SoftOpExternalMgr* 	CtControl::externalOperation() 	{return m_op_ext;}
 
