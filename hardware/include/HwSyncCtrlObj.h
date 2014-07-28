@@ -36,6 +36,7 @@ class LIMACORE_API HwSyncCtrlObj
 	DEB_CLASS(DebModHardware, "HwSyncCtrlObj");
 	friend class CtAcquisition;
 public:
+	enum AutoExposureMode {OFF,ON};
 
 	struct ValidRangesType {
 		ValidRangesType() :
@@ -86,6 +87,11 @@ public:
 
 	virtual void setExpTime(double  exp_time) = 0;
 	virtual void getExpTime(double& exp_time) = 0;
+	virtual bool checkAutoExposureMode(AutoExposureMode mode) const;
+	virtual void setHwAutoExposureMode(AutoExposureMode mode);
+
+	void setAutoExposureMode(AutoExposureMode mode);
+	void getAutoExposureMode(AutoExposureMode& mode) const;
 
 	virtual void setLatTime(double  lat_time) = 0;
 	virtual void getLatTime(double& lat_time) = 0;
@@ -102,12 +108,15 @@ public:
 	void unregisterValidRangesCallback(ValidRangesCallback* cb);
         inline void validRangesChanged(const ValidRangesType &ranges)
         {
+	  DEB_MEMBER_FUNCT();
 	  if(m_valid_ranges_cb)
 	    m_valid_ranges_cb->validRangesChanged(ranges);
 	}
 	inline void getAcqMode(AcqMode &acqMode) const {acqMode = m_acq_mode;}
  protected:
 	inline void setAcqMode(AcqMode acqMode) {m_acq_mode = acqMode;}
+
+	AutoExposureMode        m_auto_exposure_mode;
  private:
 	AcqMode		 	m_acq_mode;
 	ValidRangesCallback* 	m_valid_ranges_cb;
@@ -115,7 +124,10 @@ public:
 
 LIMACORE_API std::ostream& operator <<(std::ostream& os, 
 				       const HwSyncCtrlObj::ValidRangesType&);
-
+LIMACORE_API std::ostream& operator <<(std::ostream& os,
+				       const HwSyncCtrlObj::AutoExposureMode&);
+LIMACORE_API const char* convert_2_string(HwSyncCtrlObj::AutoExposureMode mode);
+LIMACORE_API void convert_from_string(const std::string&,HwSyncCtrlObj::AutoExposureMode&);
 } // namespace lima
 
 #endif // HWSYNCCTRLOBJ_H

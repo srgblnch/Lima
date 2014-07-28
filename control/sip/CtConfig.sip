@@ -19,14 +19,96 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
+%If (WITH_CONFIG)
 class Setting;
 
 %ExportedHeaderCode
+ //START TRICK
+#endif
+#ifndef _SEB_CORE_TRICK_
+#define _SEB_CORE_TRICK_
+#ifdef _limacoreAPI_H
+#include "sipAPIlimacore.h"
+ //END TRICK
+
 #include <ConfigUtils.h>
 #ifdef WIN32
 #pragma warning( disable : 4290 )
+#pragma warning( disable : 4800 )
 #endif
-#include <../../third-party/libconfig/lib/libconfig.h++>
+
+inline long _from_python_long_2_c(PyObject* value,int& return_value)
+{
+#if PY_VERSION_HEX >= 0x02070000
+  int overflow;
+  long cValue = PyLong_AsLongAndOverflow(value,&overflow);
+  if(overflow == 1 || overflow == -1)
+    {
+      PyErr_SetString(PyExc_ValueError,
+		      "don't manage big int (overflow)");
+      return_value = 1;
+      return -1;
+    }
+#else
+  long cValue = PyLong_AsLong(value);
+#endif
+  return cValue;
+}
+
+int _fill_setting_with_dict(Setting &setting,PyObject *dict);
+
+inline int _fill_setting_with_list(Setting &setting,
+				   PyObject *list)
+{
+  int return_value = 0;
+  try
+    {
+      Py_ssize_t list_lenght = PyList_GET_SIZE(list);
+      for(Py_ssize_t index = 0;
+	  !return_value && index < list_lenght;++index)
+	{
+	  PyObject* value = PyList_GetItem(list,index);
+	  
+	  if(PyString_Check(value))
+	    setting.append(PyString_AS_STRING(value));
+	  else if(PyFloat_Check(value))
+	    setting.append(PyFloat_AS_DOUBLE(value));
+	  else if(PyLong_Check(value))
+	    {
+	      long cValue = _from_python_long_2_c(value,return_value);
+	      setting.append(cValue);
+	    }
+	  else if(PyInt_Check(value))
+	    setting.append(int(PyInt_AsLong(value)));
+	  else if(PyBool_Check(value))
+	    setting.append(PyObject_IsTrue(value));
+	  else if(PyDict_Check(value))
+	    {
+	      Setting child = setting.addChild(NULL);
+	      return_value = _fill_setting_with_dict(child,value);
+	    }
+	  else if(PyList_Check(value))
+	    {
+	      Setting child = setting.addList(NULL);
+	      return_value = _fill_setting_with_list(child,value);
+	    }
+	  else
+	    {
+	      PyErr_SetString(PyExc_ValueError,
+			      "Type not yet managed");
+	      return_value = 1;
+	      break;
+	    }
+	}
+    }
+  catch(...)
+    {
+      Py_BEGIN_ALLOW_THREADS;
+      throw;
+      Py_END_ALLOW_THREADS;
+    }
+  return return_value;
+}
 
 inline int _fill_setting_with_dict(Setting &setting,
 				   PyObject *dict)
@@ -54,19 +136,7 @@ inline int _fill_setting_with_dict(Setting &setting,
 			PyFloat_AS_DOUBLE(value));
 	  else if(PyLong_Check(value))
 	    {
-#if PY_VERSION_HEX >= 0x02070000
-	      int overflow;
-	      long cValue = PyLong_AsLongAndOverflow(value,&overflow);
-	      if(overflow == 1 || overflow == -1)
-		{
-		  PyErr_SetString(PyExc_ValueError,
-				  "don't manage big int (overflow)");
-		  return_value = 1;
-		  break;
-		}
-#else
-	      long cValue = PyLong_AsLong(value);
-#endif
+	      long cValue = _from_python_long_2_c(value,return_value);
 	      setting.set(PyString_AS_STRING(key),
 			  cValue);
 	    }
@@ -80,6 +150,36 @@ inline int _fill_setting_with_dict(Setting &setting,
 	    {
 	      Setting child = setting.addChild(PyString_AS_STRING(key));
 	      return_value = _fill_setting_with_dict(child,value);
+	    }
+	  else if(PyList_Check(value))
+	    {
+	      Setting child = setting.addList(PyString_AS_STRING(key));
+	      return_value = _fill_setting_with_list(child,value);
+	    }
+	  else if(sipCanConvertToType(value,sipType_Data,SIP_NOT_NONE))
+	    {
+	      int state;
+	      int error = 0;
+	      int *sipIsErr = &error;
+	      Data *data = 
+		reinterpret_cast<Data*>(sipConvertToType(value,
+							 sipType_Data, 0,	
+							 SIP_NOT_NONE,
+							 &state, sipIsErr));
+	      if(*sipIsErr)
+		{
+		  sipReleaseType(data,sipType_Data,state);
+		  delete data;
+		  PyErr_SetString(PyExc_ValueError,
+			      "Error data convertion");
+		  return_value = 1;
+		  break;
+		}
+	      else
+		{
+		  setting.set(PyString_AS_STRING(key),*data);
+		  sipReleaseType(data,sipType_Data,state);
+		}
 	    }
 	  else
 	    {
@@ -99,54 +199,68 @@ inline int _fill_setting_with_dict(Setting &setting,
   return return_value;
 }
 
-inline bool _build_dict_from_setting(const libconfig::Setting &setting,
+inline bool _build_dict_from_setting(const Setting &setting,
 				     PyObject* dict)
 {
   bool return_value = 0;
   try
     {
-      for(int i = 0;
-	  !return_value && i < setting.getLength();++i)
+      for(Setting::const_iterator i = setting.begin();
+	  !return_value && i != setting.end();++i)
 	{
-	  const libconfig::Setting& sub_setting = setting[i];
+	  Setting sub_setting = *i;
 	  PyObject* py_value;
 	  switch(sub_setting.getType())
 	    {
-	    case libconfig::Setting::TypeInt:
+	    case Setting::Int:
 	      {
 		int value = sub_setting;
 		py_value = PyInt_FromLong(long(value));
 		break;
 	      }
-	    case libconfig::Setting::TypeInt64:
+	    case Setting::Int64:
 	      {
 		long long value = sub_setting;
 		py_value = PyLong_FromLongLong(value);
 		break;
 	      }
-	    case libconfig::Setting::TypeFloat:
+	    case Setting::Float:
 	      {
 		double value = sub_setting;
 		py_value = PyFloat_FromDouble(value);
 		break;
 	      }
-	    case libconfig::Setting::TypeString:
+	    case Setting::String:
 	      {
 		const char* value = sub_setting;
 		py_value = PyString_FromString(value);
 		break;
 	      }
-	    case libconfig::Setting::TypeBoolean:
+	    case Setting::Boolean:
 	      {
 		bool value = sub_setting;
 		py_value = PyBool_FromLong(value);
 		break;
 	      }
-	    case libconfig::Setting::TypeGroup:
+	    case Setting::Group:
 	      {
 		py_value = PyDict_New();
 		return_value = _build_dict_from_setting(sub_setting,
 							py_value);
+		break;
+	      }
+	    case Setting::List:
+	      {
+		py_value = PyList_New(0);
+		return_value = _build_dict_from_setting(sub_setting,py_value);
+		break;
+	      }
+	    case Setting::DataType:
+	      {
+		Data value;
+		setting.get(sub_setting.getName(),value);
+		Data *dataPt = new Data(value);
+		py_value = sipConvertFromNewType(dataPt,sipType_Data,NULL);
 		break;
 	      }
 	    default:
@@ -158,28 +272,32 @@ inline bool _build_dict_from_setting(const libconfig::Setting &setting,
 	    }
 
 	  if(!return_value)
-	    return_value = PyDict_SetItemString(dict,
-						sub_setting.getName(),
-						py_value);
+	    {
+	      if(PyDict_Check(dict))
+		return_value = PyDict_SetItemString(dict,
+						    sub_setting.getName(),
+						    py_value);
+	      else
+		return_value = PyList_Append(dict,py_value);
+	    }
 	  
 	  if(py_value)
 	    Py_DECREF(py_value);
 	}
     }
-  catch(libconfig::ConfigException& exc)
+  catch(Exception &exp)
     {
-      PyErr_SetString(PyExc_ValueError,
-		      exc.what());
-      return_value = 1;
-    }
-  catch(...)
-    {
-      PyErr_SetString(PyExc_ValueError,
-		      "unknown exception");
+    const std::string &tmpString = exp.getErrMsg();
+    const char* detail = tmpString.c_str();
+      PyErr_SetString(sipException_Exception,detail);
       return_value = 1;
     }
   return return_value;
 }
+#endif
+#endif
+#ifndef _limacoreAPI_H_SEB
+#define _limacoreAPI_H_SEB
 %End
 
 class CtConfig
@@ -256,11 +374,10 @@ virtual void restore(SIP_PYDICT) = 0 [void (const Setting&)];
 sipIsErr = 1;			// should never happen
 %End
 %VirtualCatcherCode
-      const libconfig::Setting* setting = a0.get_raw_setting();
-      if(setting && setting->isGroup())
+      if(a0.isGroup())
 	{
 	  PyObject *dict = PyDict_New();
-	  sipIsErr = _build_dict_from_setting(*setting,dict);
+	  sipIsErr = _build_dict_from_setting(a0,dict);
 	  if(!sipIsErr)
 	    sipCallMethod(&sipIsErr,sipMethod,"R",dict);
 
@@ -286,3 +403,4 @@ sipIsErr = 1;			// should never happen
 private:
   CtConfig(const CtConfig &);
 };
+%End

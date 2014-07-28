@@ -29,7 +29,8 @@ INCLUDES = -I. -I../include -I../../common/include -I../../hardware/include \
 		-I../software_operation/include \
 		-I../../third-party/Processlib/core/include \
 		-I../../third-party/Processlib/tasks/include \
-		-I../../third-party/Sps/Include
+		-I../../third-party/Sps/Include # \
+#		-I/usr/include/nexuscpp/include
 
 ifneq ($(LIBS),0)
 LIBS=
@@ -51,16 +52,28 @@ ifndef COMPILE_EDFGZ_SAVING
 COMPILE_EDFGZ_SAVING = 0
 endif
 
+ifndef COMPILE_TIFF_SAVING
+COMPILE_TIFF_SAVING = 0
+endif
+
 ifneq ($(COMPILE_CBF_SAVING),0)
 ct-objs += CtSaving_Cbf.o 
 INCLUDES += -I../../third-party/CBFLib/include
 CXXFLAGS += -DWITH_CBF_SAVING
 endif
 
+ifneq ($(COMPILE_HDF5_SAVING),0)
+ct-objs += CtSaving_Hdf5.o 
+INCLUDES += -I../../third-party/hdf5/src
+INCLUDES += -I../../third-party/hdf5/c++/src
+CXXFLAGS += -DWITH_HDF5_SAVING
+endif
+
 ifneq ($(COMPILE_NXS_SAVING),0)
 ct-objs += CtSaving_Nxs.o 
-# nexus4tango lib is not yet available but soon !
+# nexuscpp lib is not yet available but soon !
 #INCLUDES += -I../../third-party/NXSLib/include
+INCLUDES += `pkg-config nexuscpp --cflags-only-I`
 CXXFLAGS += -DWITH_NXS_SAVING
 endif
 
@@ -76,6 +89,11 @@ endif
 
 ifneq ($(COMPILE_EDFGZ_SAVING),0)
 CXXFLAGS += -DWITH_EDFGZ_SAVING
+endif
+
+ifneq ($(COMPILE_TIFF_SAVING),0)
+ct-objs += CtSaving_Tiff.o 
+CXXFLAGS += -DWITH_TIFF_SAVING
 endif
 
 ifndef COMPILE_SPS_IMAGE
@@ -118,3 +136,7 @@ clean:
 	rm -f $*.d
 
 -include $(SRCS:.cpp=.P)
+
+.PHONY: check-syntax
+check-syntax:
+	$(CXX) -Wall -Wextra -fsyntax-only $(CXXFLAGS) $(CHK_SOURCES)

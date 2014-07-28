@@ -70,6 +70,18 @@ void SaveContainerNxs::_close()
   DEB_MEMBER_FUNCT();
 }
 
+
+//--------------------------------------------------------------------------------------------------------------------
+//- Event rising by CtSaving when ???
+//--------------------------------------------------------------------------------------------------------------------
+void SaveContainerNxs::_clear()
+{
+  DEB_MEMBER_FUNCT();
+
+	nxcpp::DataStreamer::ResetBufferIndex();
+}
+
+
 //--------------------------------------------------------------------------------------------------------------------
 //- create nexus object
 //- Initialize nexus object
@@ -91,7 +103,7 @@ void SaveContainerNxs::_writeFile(Data &aData,
 	  {
 		  DEB_TRACE()<<"SaveContainerNxs::_writeFile() aData.frameNumber = "<<aData.frameNumber;
 		  //that's mean that snap was stopped previous by user command or device was hang
-		  //so me must clean the N4T object
+		  //so me must clean the NXS object
 		  if(m_writer && aData.frameNumber==0)
 		  {
 			DEB_TRACE()<<"SaveContainerNxs::_writeFile() - Abort() current Nexus writer";
@@ -181,13 +193,25 @@ void SaveContainerNxs::_writeFile(Data &aData,
 			  my_error<<ex.errors[i].desc;
 		  }
 		  DEB_TRACE()<<my_error.str();
-		  throw LIMA_CTL_EXC(Error,my_error.str());
+		  THROW_CTL_ERROR(Error) << my_error.str();
 	  }
 	  catch(...)
 	  {
 		  DEB_TRACE()<<"SaveContainerNxs::_writeFile() - catch UNKNOWN Exception";
-		  throw LIMA_CTL_EXC(Error,"SaveContainerNxs::_writeFile() - catch UNKNOWN Exception");
+		  THROW_CTL_ERROR(Error) << "SaveContainerNxs::_writeFile() - catch UNKNOWN Exception";
 	  }
 }
 
+//--------------------------------------------------------------------------------------------------------------------
+
+
+//--------------------------------------------------------------------------------------------------------------------
+//- reset the file counter index to 0
+//--------------------------------------------------------------------------------------------------------------------
+void
+SaveContainerNxs::_clear() {
+  DEB_MEMBER_FUNCT();
+  DEB_TRACE() << "In SaveContainerNxs::_clear, resetting the buffer index CLEAR .";
+  nxcpp::DataStreamer::ResetBufferIndex();
+}
 //--------------------------------------------------------------------------------------------------------------------

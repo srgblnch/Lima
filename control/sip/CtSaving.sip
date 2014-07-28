@@ -124,6 +124,8 @@ using namespace lima;
 	NXS,
 	FITS,
 	EDFGZ,
+	TIFFFormat,
+	HDF5,
     };
 
     enum SavingMode {
@@ -136,6 +138,7 @@ using namespace lima;
       Abort,
       Overwrite,
       Append,
+      MultiSet,
     };	
 
     struct Parameters {
@@ -232,6 +235,7 @@ using namespace lima;
     // --- misc
 
     void clear();
+    void close();
     void writeFrame(int frame_nr = -1, int nb_frames = 1,
 		    bool synchronous = true);
 

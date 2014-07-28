@@ -49,6 +49,14 @@
 #include "CtSaving_Fits.h"
 #endif
 
+#ifdef WITH_TIFF_SAVING
+#include "CtSaving_Tiff.h"
+#endif
+
+#ifdef WITH_HDF5_SAVING
+#include "CtSaving_Hdf5.h"
+#endif
+
 #include "TaskMgr.h"
 #include "SinkTask.h"
 
@@ -150,13 +158,19 @@ CtSaving::Parameters::Parameters()
 
 void CtSaving::Parameters::checkValid() const
 {
+  DEB_MEMBER_FUNCT();
   switch(fileFormat)
     {
 #ifdef WITH_CBF_SAVING
     case CBFFormat :
       if(framesPerFile > 1)
-	throw LIMA_CTL_EXC(InvalidValue, "CBF file format does not support "
-			                 "multi frame per file");
+	THROW_CTL_ERROR(InvalidValue) << "CBF file format does not support "
+			                 "multi frame per file";
+      break;
+    case TIFFFormat :
+      if(framesPerFile > 1)
+	THROW_CTL_ERROR(InvalidValue) << "TIFF file format does not support "
+			                 "multi frame per file";
       break;
 #endif
 #ifndef __unix
@@ -236,7 +250,7 @@ void CtSaving::Stream::setActive(bool active)
   m_active = active;
 }
 
-void CtSaving::Stream::prepare()
+void CtSaving::Stream::prepare(CtControl& ct)
 {
   DEB_MEMBER_FUNCT();
 
@@ -246,8 +260,13 @@ void CtSaving::Stream::prepare()
       updateParameters();
       checkWriteAccess();
     }
+  m_save_cnt->prepare(ct);
 }
 
+void CtSaving::Stream::close()
+{
+  m_save_cnt->close();
+}
 void CtSaving::Stream::updateParameters()
 {
   DEB_MEMBER_FUNCT();
@@ -293,6 +312,18 @@ void CtSaving::Stream::createSaveContainer()
                                      "saving option, not managed"; 
 #endif
     goto common;
+  case TIFFFormat:
+#ifndef WITH_TIFF_SAVING
+    THROW_CTL_ERROR(NotSupported) << "Lima is not compiled with the tiff "
+                                     "saving option, not managed";  
+#endif
+    goto common;
+  case HDF5:
+#ifndef WITH_HDF5_SAVING
+    THROW_CTL_ERROR(NotSupported) << "Lima is not compiled with the hdf5 "
+                                     "saving option, not managed";
+#endif
+    goto common;
   case RAW:
   case EDF:
 
@@ -328,6 +359,17 @@ void CtSaving::Stream::createSaveContainer()
 #ifdef WITH_FITS_SAVING
   case FITS:
     m_save_cnt = new SaveContainerFits(*this);
+    break;
+#endif
+#ifdef WITH_TIFF_SAVING
+  case TIFFFormat:
+    m_save_cnt = new SaveContainerTiff(*this);
+    m_pars.framesPerFile = 1;
+    break;
+#endif
+#ifdef WITH_HDF5_SAVING
+  case HDF5:
+    m_save_cnt = new SaveContainerHdf5(*this, m_pars.fileFormat);
     break;
 #endif
   default:
@@ -577,6 +619,7 @@ void CtSaving::setDirectory(const std::string &directory, int stream_idx)
   AutoMutex aLock(m_cond.mutex());
   Stream& stream = getStream(stream_idx);
   Parameters pars = stream.getParameters(Auto);
+  stream.checkDirectoryAccess(directory);
   pars.directory = directory;
   stream.setParameters(pars);
 }
@@ -658,6 +701,7 @@ void CtSaving::setNextNumber(long number, int stream_idx)
   AutoMutex aLock(m_cond.mutex());
   Stream& stream = getStream(stream_idx);
   Parameters pars = stream.getParameters(Auto);
+  //if(pars.overwritePolicy != MultiSet && pars.overwritePolicy != Append)
   pars.nextNumber = number;
   stream.setParameters(pars);
 }
@@ -804,6 +848,13 @@ void CtSaving::setOverwritePolicy(OverwritePolicy policy, int stream_idx)
   Stream& stream = getStream(stream_idx);
   Parameters pars = stream.getParameters(Auto);
   pars.overwritePolicy = policy;
+  // in multiset framesPerFile is not relevant set it to -1
+  // but when switching to an other policy default is 1 
+  if(policy == MultiSet)
+    pars.framesPerFile = -1;
+  else if (pars.framesPerFile == -1)
+    pars.framesPerFile = 1;
+
   stream.setParameters(pars);
 }
 /** @brief get the overwrite policy for a saving stream
@@ -1017,6 +1068,7 @@ void CtSaving::updateFrameHeader(long frame_nr,const HeaderMap &header)
       if(!result.second)
 	result.first->second = i->second;
     }
+  _validateFrameHeader(frame_nr,aLock);
 }
 /** @brief validate a header for a frame.
     this mean that the header is ready and can now be save.
@@ -1028,6 +1080,12 @@ void CtSaving::validateFrameHeader(long frame_nr)
   DEB_PARAM() << DEB_VAR1(frame_nr);
 
   AutoMutex aLock(m_cond.mutex());
+  _validateFrameHeader(frame_nr,aLock);
+}
+
+void CtSaving::_validateFrameHeader(long frame_nr,
+				    AutoMutex& aLock)
+{
   SavingMode saving_mode = getAcqSavingMode();
   if (saving_mode != CtSaving::AutoHeader)
     return;
@@ -1307,6 +1365,14 @@ void CtSaving::clear()
   m_frame_datas.clear();
   
 }
+
+void CtSaving::close()
+{
+  DEB_MEMBER_FUNCT();
+  AutoMutex aLock(m_cond.mutex());
+  _close();
+}
+
 /** @brief write manually a frame
 
     @param aFrameNumber the frame id you want to save
@@ -1494,6 +1560,7 @@ void CtSaving::_saveFinished(Data &aData, Stream& stream)
   if (!auto_saving || !data_available || 
       ((saving_mode == AutoHeader) && !header_available)) {
     m_ready_flag = true;
+    if(m_saving_stop) _close();
     m_cond.signal();
     return;
   }
@@ -1543,7 +1610,7 @@ void CtSaving::_setSavingError(CtControl::ErrorCode anErrorCode)
     this methode will resetLastFrameNb if mode is AutoSave
     and validate the parameter for this new acquisition
  */
-void CtSaving::_prepare()
+void CtSaving::_prepare(CtControl& ct)
 {
   DEB_MEMBER_FUNCT();
 
@@ -1561,7 +1628,9 @@ void CtSaving::_prepare()
       for (int s = 0; s < m_nb_stream; ++s) {
 	Stream& stream = getStream(s);
 	if (stream.isActive()) {
-	  stream.prepare();
+	  aLock.unlock();
+	  stream.prepare(ct);
+	  aLock.lock();
 	  if (stream.needCompression())
 	    m_need_compression = true;
 	}
@@ -1593,6 +1662,8 @@ void CtSaving::_prepare()
 	case EDF: fileFormat = HwSavingCtrlObj::EDF_FORMAT_STR;break;
 	case CBFFormat: fileFormat = HwSavingCtrlObj::CBF_FORMAT_STR;break;
 	case HARDWARE_SPECIFIC: fileFormat = m_specific_hardware_format;break;
+	case TIFFFormat: fileFormat = HwSavingCtrlObj::TIFF_FORMAT_STR;break;
+	case HDF5: fileFormat = HwSavingCtrlObj::HDF5_FORMAT_STR;break;
 	default:
 	  THROW_CTL_ERROR(NotSupported) << "Not supported yet";break;
 	}
@@ -1605,6 +1676,27 @@ void CtSaving::_prepare()
       m_hwsaving->prepare();
       m_hwsaving->start();
     }
+  m_saving_stop = false;
+}
+
+void CtSaving::_stop(CtControl&)
+{
+  close();
+}
+
+void CtSaving::_close()
+{
+  if(m_ready_flag)
+    {
+      for (int s = 0; s < m_nb_stream; ++s)
+	{
+	  Stream& stream = getStream(s);
+	  if(stream.isActive())
+	    stream.close();
+	}
+    }
+  else
+    m_saving_stop = true;
 }
 
 #ifdef WITH_CONFIG
@@ -1692,7 +1784,11 @@ void CtSaving::SaveContainer::writeFile(Data &aData,HeaderMap &aHeader)
       THROW_CTL_ERROR(Error) << "Save unknown error";
     }
 
-  if(++m_written_frames == pars.framesPerFile) {
+  ++m_written_frames;
+  if((pars.overwritePolicy != MultiSet &&
+      m_written_frames == pars.framesPerFile) ||
+     m_written_frames == m_nb_frames_to_write) // Close file at the end of acquisition
+    {
     try {
       close();
     } catch (...) {
@@ -1746,10 +1842,20 @@ void CtSaving::SaveContainer::getParameters(CtSaving::Parameters& pars) const
 
 void CtSaving::SaveContainer::clear()
 {
+  DEB_MEMBER_FUNCT();
   AutoMutex aLock(m_cond.mutex());
   m_statistic_list.clear();
   this->close();
   _clear();			// call inheritance if needed
+}
+
+void CtSaving::SaveContainer::prepare(CtControl& ct)
+{
+  DEB_MEMBER_FUNCT();
+  int nb_frames;
+  ct.acquisition()->getAcqNbFrames(nb_frames);
+  m_nb_frames_to_write = nb_frames;
+  _prepare(ct);			// call inheritance if needed
 }
 
 void CtSaving::SaveContainer::open(const CtSaving::Parameters &pars)
@@ -1758,10 +1864,27 @@ void CtSaving::SaveContainer::open(const CtSaving::Parameters &pars)
 
   if(!m_file_opened)
     {
-      char idx[64];
-      snprintf(idx,sizeof(idx),pars.indexFormat.c_str(),pars.nextNumber);
 
-      std::string aFileName = pars.directory + DIR_SEPARATOR + pars.prefix + idx + pars.suffix;
+      std::string aFileName = pars.directory + DIR_SEPARATOR + pars.prefix;
+      long index = pars.nextNumber;
+      if(pars.overwritePolicy == MultiSet || pars.overwritePolicy == Append)
+	{
+	  char idx[64];
+	  if (index < 0) index = 0;
+	  snprintf(idx,sizeof(idx),pars.indexFormat.c_str(),index);
+	  aFileName += idx;
+	} 
+      else
+	{
+	  char idx[64];
+	  //snprintf(idx, sizeof(idx), pars.indexFormat.c_str(), ++index);
+	  snprintf(idx, sizeof(idx), pars.indexFormat.c_str(), index);
+	  aFileName += idx;
+	  //Parameters& params = m_stream.getParameters(Acq);
+	  //params.nextNumber = index;
+	  //m_stream.setParameters(params);
+	}
+      aFileName += pars.suffix;
       DEB_TRACE() << DEB_VAR1(aFileName);
 
       if(pars.overwritePolicy == Abort && 
@@ -1772,8 +1895,9 @@ void CtSaving::SaveContainer::open(const CtSaving::Parameters &pars)
 	  output = "Try to over write file: " + aFileName;
 	  THROW_CTL_ERROR(Error) << output;
 	}
-	  std::ios_base::openmode openFlags = std::ios_base::out | std::ios_base::binary;
-      if(pars.overwritePolicy == Append)
+      std::ios_base::openmode openFlags = std::ios_base::out | std::ios_base::binary;
+      if(pars.overwritePolicy == Append ||
+	 pars.overwritePolicy == MultiSet)
 	openFlags |= std::ios_base::app;
       else if(pars.overwritePolicy == Overwrite)
 	openFlags |= std::ios_base::trunc;
@@ -1835,7 +1959,8 @@ void CtSaving::SaveContainer::close()
   m_file_opened = false;
   m_written_frames = 0;
   Parameters& pars = m_stream.getParameters(Acq);
-  ++pars.nextNumber;
+  if(pars.overwritePolicy != MultiSet && pars.overwritePolicy != Append)
+    ++pars.nextNumber;
 }
 
 /** @brief check if all file can be written
@@ -1867,11 +1992,11 @@ void CtSaving::Stream::checkWriteAccess()
 	  THROW_CTL_ERROR(Error) << output;
 	}
 
-      // check if it's writtable
-      DEB_TRACE() << "Check if directory is writtable";
+      // check if it's writable
+      DEB_TRACE() << "Check if directory is writable";
       if(access(m_pars.directory.c_str(),W_OK))
 	{
-	  output = "Directory : " + m_pars.directory + " is not writtable";
+	  output = "Directory : " + m_pars.directory + " is not writable";
 	  THROW_CTL_ERROR(Error) << output;
 	}
     }
@@ -1973,4 +2098,58 @@ void CtSaving::Stream::checkWriteAccess()
       if(errorFlag)
 	        THROW_CTL_ERROR(Error) << output;
     } // if(m_pars.overwritePolicy == Abort)
+}
+
+void CtSaving::Stream::checkDirectoryAccess(const std::string& directory)
+{
+  DEB_MEMBER_FUNCT();
+  std::string local_directory = directory;
+  std::string output;
+  // check if directory exist
+  DEB_TRACE() << "Check if directory exist";
+  if(access(local_directory.c_str(),F_OK))
+    {
+      bool continue_flag;
+      do
+	{
+#ifdef WIN32
+      size_t pos = local_directory.find_last_of("\\/");
+#else
+      size_t pos = local_directory.find_last_of("/");
+#endif
+      size_t string_length = local_directory.size() - 1;
+      continue_flag = pos == string_length;
+      if(pos != std::string::npos)
+	local_directory = local_directory.substr(0,pos);
+	}
+      while(continue_flag);
+
+      if(access(local_directory.c_str(),F_OK))
+	{
+	  output = "Directory :" + local_directory + " doesn't exist";
+	  THROW_CTL_ERROR(Error) << output;
+	}
+    }
+
+  // check if it's a directory
+  struct stat aDirectoryStat;
+  if(stat(local_directory.c_str(),&aDirectoryStat))
+    {
+      output = "Can stat directory : " + local_directory;
+      THROW_CTL_ERROR(Error) << output;
+    }
+  DEB_TRACE() << "Check if it's really a directory";
+  if(!S_ISDIR(aDirectoryStat.st_mode))
+    {
+      output = "Path : " + local_directory + " is not a directory";
+      THROW_CTL_ERROR(Error) << output;
+    }
+  
+  // check if it's writable
+  DEB_TRACE() << "Check if directory is writable";
+  if(access(local_directory.c_str(),W_OK))
+    {
+      output = "Directory : " + local_directory + " is not writable";
+      THROW_CTL_ERROR(Error) << output;
+    }
 }

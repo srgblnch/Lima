@@ -42,6 +42,12 @@ sip-modules += maxipix
 endif
 
 ifneq ($(COMPILE_BASLER), 0)
+ifndef PYLON_ROOT
+export PYLON_ROOT = /opt/pylon
+endif
+ifndef GENICAM_ROOT_V2_1
+export GENICAM_ROOT_V2_1 = $(PYLON_ROOT)/genicam
+endif
 sip-modules += basler
 endif
 
@@ -71,8 +77,20 @@ ifneq ($(COMPILE_ANDOR), 0)
 sip-modules += andor
 endif
 
+ifneq ($(COMPILE_ANDOR3), 0)
+sip-modules += andor3
+endif
+
 ifneq ($(COMPILE_XH), 0)
 sip-modules += xh
+endif
+
+ifneq ($(COMPILE_XSPRESS3), 0)
+sip-modules += xspress3
+endif
+
+ifneq ($(COMPILE_ULTRA), 0)
+sip-modules += ultra
 endif
 
 ifneq ($(COMPILE_XPAD), 0)
@@ -91,13 +109,26 @@ ifneq ($(COMPILE_POINTGREY), 0)
 sip-modules += pointgrey
 endif
 
+ifneq ($(COMPILE_IMXPAD), 0)
+sip-modules += imxpad
+endif
+
+ifneq ($(COMPILE_RAYONIXHS), 0)
+sip-modules += rayonixhs
+endif
+
+ifneq ($(COMPILE_AVIEX), 0)
+sip-modules += aviex
+endif
+
 all:	src
 
 src:
-	$(MAKE) -C ../third-party sip
+	$(MAKE) -C ../third-party prelima.sip
 	for d in $(sip-modules); do \
 		$(MAKE) -C $$d || break; \
 	done
+	$(MAKE) -C ../third-party postlima.sip
 
 config:	clean mrproper
 	python configure.py

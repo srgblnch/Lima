@@ -73,6 +73,17 @@ ifneq ($(COMPILE_EDFGZ_SAVING),0)
 CORE_LDLIBS += -lz
 endif
 
+ifneq ($(COMPILE_TIFF_SAVING),0)
+CORE_LDLIBS += -ltiff
+endif
+
+ifneq ($(COMPILE_HDF5_SAVING),0)
+PROCESSOR_TYPE := $(shell uname -m)
+CORE_LDFLAGS += -L../third-party/hdf5/src/.libs -Wl,-rpath=$(shell pwd)/../third-party/hdf5/src/.libs
+CORE_LDFLAGS += -L../third-party/hdf5/c++/src/.libs -Wl,-rpath=$(shell pwd)/../third-party/hdf5/c++/src/.libs
+CORE_LDLIBS += -lhdf5_cpp -lhdf5
+endif
+
 ifneq ($(COMPILE_CONFIG),0)
 CORE_LDLIBS += -L../third-party/libconfig/lib/.libs -Wl,-rpath=$(shell pwd)/../third-party/libconfig/lib/.libs  -lconfig++
 endif
@@ -204,7 +215,11 @@ endif
 
 ifneq ($(COMPILE_BASLER),0)
 
-BASLER_LDFLAGS	:= $(LDFLAGS) -L. -L/opt/pylon/lib -L/opt/pylon/lib64
+ifndef PYLON_ROOT
+PYLON_ROOT	:= /opt/pylon
+endif
+
+BASLER_LDFLAGS	:= $(LDFLAGS) -L. -L$(PYLON_ROOT)/lib -L$(PYLON_ROOT)/lib64
 BASLER_LDLIBS	:= $(LDLIBS) -lpylongigesupp
 
 basler-name	:= basler
@@ -375,6 +390,30 @@ build_targets	+= $(call lib-full,$(andor-name),$(andor-ver))
 endif
 
 ############################
+# LIMA - ANDOR3
+############################
+
+ifneq ($(COMPILE_ANDOR3),0)
+
+ANDOR3_LDFLAGS	:= $(LDFLAGS) -L. -L/usr/local/lib
+ANDOR3_LDLIBS	:= $(LDLIBS) -latcore
+
+andor3-name	:= andor3
+andor3-objs	:= ../camera/andor3/src/Andor3.o
+andor3-ver	:= ../camera/andor3/VERSION
+andor3-flags	:= $(ANDOR3_LDFLAGS)
+andor3-deps	:= $(ANDOR3_LDLIBS)
+
+$(call lib-full,$(andor3-name),$(andor3-ver)): $(andor3-objs)
+	$(call compile-lib,$(andor3-name),$(andor3-ver),\
+			   $(andor3-flags),$(andor3-deps),$@,$+)
+	$(call create-links,$(andor3-name),$(andor3-ver))
+
+build_targets	+= $(call lib-full,$(andor3-name),$(andor3-ver))
+
+endif
+
+############################
 # LIMA - MARCCD
 ############################
 
@@ -419,6 +458,67 @@ $(call lib-full,$(xh-name),$(xh-ver)): $(xh-objs)
 	$(call create-links,$(xh-name),$(xh-ver))
 
 build_targets	+= $(call lib-full,$(xh-name),$(xh-ver))
+
+endif
+
+############################
+# LIMA - XSPRESS3
+############################
+
+ifneq ($(COMPILE_XSPRESS3),0)
+
+PROCESSOR_TYPE := $(shell uname -m)
+ifeq ($(PROCESSOR_TYPE),x86_64)
+XSPRESS3_LDFLAGS	:= -L../camera/xspress3/sdk/libs/linux.x86_64
+else
+XSPRESS3_LDFLAGS	:= -L../camera/xspress3/sdk/libs/linux.x86
+endif
+XSPRESS3_LDLIBS	:= -lxspress3 -limg_mod
+
+xspress3-name	:= xspress3
+xspress3-objs	:= ../camera/xspress3/src/Xspress3.o
+xspress3-ver	:= ../camera/xspress3/VERSION
+xspress3-flags	:= $(XSPRESS3_LDFLAGS) $(LDFLAGS)
+xspress3-deps	:= $(XSPRESS3_LDLIBS) $(LDLIBS) 
+
+$(call lib-full,$(xspress3-name),$(xspress3-ver)): $(xspress3-objs)
+	$(call compile-lib,$(xspress3-name),$(xspress3-ver),\
+			   $(xspress3-flags),$(xspress3-deps),$@,$+)
+	$(call create-links,$(xspress3-name),$(xspress3-ver))
+
+build_targets	+= $(call lib-full,$(xspress3-name),$(xspress3-ver))
+
+endif
+
+############################
+# LIMA - ULTRA
+############################
+
+ifneq ($(COMPILE_ULTRA),0)
+
+PROCESSOR_TYPE := $(shell uname -m)
+#ifeq ($(PROCESSOR_TYPE),x86_64)
+#ULTRA_LDFLAGS	:= -L../camera/ultra/sdk/libs/linux.x86_64
+#ULTRA_LDFLAGS	:= 
+#else
+#ULTRA_LDFLAGS	:= -L../camera/ultra/sdk/libs/linux.x86_64
+ULTRA_LDFLAGS	:= 
+#endif
+#ULTRA_LDLIBS	:= -lultra -limg_mod
+ULTRA_LDLIBS	:= 
+
+ultra-name	:= ultra
+ultra-objs	:= ../camera/ultra/src/Ultra.o
+ultra-ver	:= ../camera/ultra/VERSION
+ultra-flags	:= $(ULTRA_LDFLAGS) $(LDFLAGS)
+ultra-deps	:= $(ULTRA_LDLIBS) $(LDLIBS) 
+
+$(call lib-full,$(ultra-name),$(ultra-ver)): $(ultra-objs)
+	$(call compile-lib,$(ultra-name),$(ultra-ver),\
+			   $(ultra-flags),$(ultra-deps),$@,$+)
+	$(call create-links,$(ultra-name),$(ultra-ver))
+
+build_targets	+= $(call lib-full,$(ultra-name),$(ultra-ver))
 
 endif
 
@@ -474,7 +574,7 @@ endif
 ############################
 ifneq ($(COMPILE_POINTGREY),0)
 
-POINTGREY_LDFLAGS	:= $(LDFLAGS)
+POINTGREY_LDFLAGS	:= $(LDFLAGS) -L../camera/pointgrey/sdk/lib
 POINTGREY_LDLIBS	:= $(LDLIBS) -lflycapture
 
 pointgrey-name	:= pointgrey
@@ -489,6 +589,75 @@ $(call lib-full,$(pointgrey-name),$(pointgrey-ver)): $(pointgrey-objs)
 	$(call create-links,$(pointgrey-name),$(pointgrey-ver))
 
 build_targets	+= $(call lib-full,$(pointgrey-name),$(pointgrey-ver))
+
+endif
+
+############################
+# LIMA - IMXPAD
+############################
+ifneq ($(COMPILE_IMXPAD),0)
+
+IMXPAD_LDFLAGS	:= $(LDFLAGS)
+IMXPAD_LDLIBS	:= $(LDLIBS)
+
+imxpad-name	:= imxpad
+imxpad-objs	:= ../camera/imxpad/src/imXpad.o
+imxpad-ver	:= ../camera/imxpad/VERSION
+imxpad-flags	:= $(IMXPAD_LDFLAGS)
+imxpad-deps	:= $(IMXPAD_LDLIBS)
+
+$(call lib-full,$(imxpad-name),$(imxpad-ver)): $(imxpad-objs)
+	$(call compile-lib,$(imxpad-name),$(imxpad-ver),\
+			   $(imxpad-flags),$(imxpad-deps),$@,$+)
+	$(call create-links,$(imxpad-name),$(imxpad-ver))
+
+build_targets	+= $(call lib-full,$(imxpad-name),$(imxpad-ver))
+
+endif
+
+############################
+# LIMA - RAYONIXHS
+############################
+ifneq ($(COMPILE_RAYONIXHS),0)
+
+#RAYONIXHS_LDFLAGS	:= $(LDFLAGS) -L../camera/rayonixhs/sdk/lib64
+RAYONIXHS_LDFLAGS	:= $(LDFLAGS) -L/opt/rayonix/lib64
+RAYONIXHS_LDLIBS	:= $(LDLIBS) -lcraydl
+
+rayonixhs-name	:= rayonixhs
+rayonixhs-objs	:= ../camera/rayonixhs/src/RayonixHs.o
+rayonixhs-ver	:= ../camera/rayonixhs/VERSION
+rayonixhs-flags	:= $(RAYONIXHS_LDFLAGS)
+rayonixhs-deps	:= $(RAYONIXHS_LDLIBS)
+
+$(call lib-full,$(rayonixhs-name),$(rayonixhs-ver)): $(rayonixhs-objs)
+	$(call compile-lib,$(rayonixhs-name),$(rayonixhs-ver),\
+			   $(rayonixhs-flags),$(rayonixhs-deps),$@,$+)
+	$(call create-links,$(rayonixhs-name),$(rayonixhs-ver))
+
+build_targets	+= $(call lib-full,$(rayonixhs-name),$(rayonixhs-ver))
+
+endif
+############################
+# LIMA - AVIEX
+############################
+ifneq ($(COMPILE_AVIEX),0)
+
+AVIEX_LDFLAGS	:= $(LDFLAGS) -L../camera/aviex/sdk/linux/lib
+AVIEX_LDLIBS	:= $(LDLIBS) -lMx
+
+aviex-name	:= aviex
+aviex-objs	:= ../camera/aviex/src/Aviex.o
+aviex-ver	:= ../camera/aviex/VERSION
+aviex-flags	:= $(AVIEX_LDFLAGS)
+aviex-deps	:= $(AVIEX_LDLIBS)
+
+$(call lib-full,$(aviex-name),$(aviex-ver)): $(aviex-objs)
+	$(call compile-lib,$(aviex-name),$(aviex-ver),\
+			   $(aviex-flags),$(aviex-deps),$@,$+)
+	$(call create-links,$(aviex-name),$(aviex-ver))
+
+build_targets	+= $(call lib-full,$(aviex-name),$(aviex-ver))
 
 endif
 

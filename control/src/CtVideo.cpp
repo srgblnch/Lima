@@ -3,6 +3,7 @@
 #include "CtVideo.h"
 #include "CtAcquisition.h"
 #include "CtImage.h"
+#include "CtBuffer.h"
 
 #include "PoolThreadMgr.h"
 #include "SinkTask.h"
@@ -17,14 +18,15 @@ enum ParModifyMask
     PARMODIFYMASK_GAIN 		= 1U << 1,
     PARMODIFYMASK_MODE	 	= 1U << 2,
     PARMODIFYMASK_ROI 		= 1U << 3,
-    PARMODIFYMASK_BIN 		= 1U << 4
+    PARMODIFYMASK_BIN 		= 1U << 4,
+    PARMODIFYMASK_AUTO_GAIN     = 1U << 5,
   };
 // --- CtVideo::Data2Imagetask
 class CtVideo::_Data2ImageTask : public SinkTaskBase
 {
   DEB_CLASS_NAMESPC(DebModControl,"Data to image","Control");
 public:
-  _Data2ImageTask(CtVideo &cnt) : SinkTaskBase(),m_cnt(cnt) {}
+  _Data2ImageTask(CtVideo &cnt) : SinkTaskBase(),m_nb_buffer(0),m_cnt(cnt) {}
 
   virtual void process(Data &aData)
   {
@@ -41,8 +43,18 @@ public:
     
     data2Image(aData,*anImage);
     
+    //Check if data is still available
+    bool still_available = _check_available(aData);
+
     aLock.lock();
     anImage->inused = 0;	// Unlock
+    if(!still_available)
+      {
+	DEB_ALWAYS() << "invalidate video copy";
+	anImage->frameNumber = -1; // invalidate copy
+	return;
+      }
+
     ++m_cnt.m_image_counter;
 
     // if read Image is not use, swap
@@ -61,8 +73,35 @@ public:
 	  }
       }
   }
+
+  long m_nb_buffer;
 private:
+  inline bool _check_available(Data& aData)
+  {
+    CtControl::ImageStatus status;
+    m_cnt.m_ct.getImageStatus(status);
+    
+    long offset = status.LastImageAcquired - aData.frameNumber;
+    return offset < m_nb_buffer;
+  }
+
   CtVideo &m_cnt;
+};
+
+class CtVideo::_videoBackgroundCallback : public TaskEventCallback
+{
+public:
+  _videoBackgroundCallback(CtVideo::ImageCallback *cbk,CtVideo::Image& image) :
+    TaskEventCallback(),m_cbk(cbk),m_image(image)
+  {
+  }
+  virtual void finished(Data&)
+  {
+    m_cbk->newImage(m_image);
+  }
+private:
+  CtVideo::ImageCallback*	m_cbk;
+  CtVideo::Image		m_image;
 };
 
 // --- CtVideo::_Data2ImageCBK 
@@ -150,7 +189,22 @@ bool CtVideo::_InternalImageCBK::newImage(char * data,int width,int height,Video
    
       if(m_video.m_image_callback)
 	{
-	  //TODO should be done in background
+	  CtVideo::Image anImageWrapper(&m_video,anImage);
+	  aLock.unlock();
+
+	  SinkTaskBase* cbk_task = new SinkTaskBase();
+	  _videoBackgroundCallback *video_cbk = new _videoBackgroundCallback(m_video.m_image_callback,
+									     anImageWrapper);
+
+
+	  cbk_task->setEventCallback(video_cbk);
+	  video_cbk->unref();
+
+	  TaskMgr *mgr = new TaskMgr();
+	  mgr->addSinkTask(0,cbk_task);
+	  cbk_task->unref();
+
+	  PoolThreadMgr::get().addProcess(mgr);
 	}
     }
   return true;
@@ -171,6 +225,7 @@ public:
     video_setting.set("live",pars.live);
     video_setting.set("exposure",pars.exposure);
     video_setting.set("gain",pars.gain);
+    video_setting.set("auto_gain_mode",convert_2_string(pars.auto_gain_mode));
     video_setting.set("mode",convert_2_string(pars.mode));
 
     // --- Roi
@@ -198,6 +253,10 @@ public:
     video_setting.get("live",pars.live);
     video_setting.get("exposure",pars.exposure);
     video_setting.get("gain",pars.gain);
+
+    std::string str_auto_gain_mode;
+    if(video_setting.get("auto_gain_mode",str_auto_gain_mode))
+      convert_from_string(str_auto_gain_mode,pars.auto_gain_mode);
 
     std::string strmode;
     if(video_setting.get("mode",strmode))
@@ -398,6 +457,8 @@ void CtVideo::getParameters(Parameters &pars) const
 
 void CtVideo::_setLive(bool liveFlag)
 {
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR1(liveFlag);
   AutoMutex aLock(m_cond.mutex());
 
   while(m_stopping_live) m_cond.wait();
@@ -408,7 +469,7 @@ void CtVideo::_setLive(bool liveFlag)
   CtControl::Status status;
   m_ct.getStatus(status);
   if(liveFlag && status.AcquisitionStatus != AcqReady)
-    throw LIMA_CTL_EXC(Error, "Can't set live mode if an acquisition is running");
+    THROW_CTL_ERROR(Error) <<  "Can't set live mode if an acquisition is running";
 
   _apply_params(aLock,liveFlag);
   
@@ -431,17 +492,25 @@ void CtVideo::_setLive(bool liveFlag)
     }
   else
     {
+      DEB_TRACE() << "NO specific video controller do the defaults :";
       if(liveFlag)
 	{
 	  CtAcquisition *acqPt = m_ct.acquisition();
 	  acqPt->setAcqNbFrames(0);	// Live
+	  DEB_TRACE() << "Set the number of frame to collect to 0 at the CtAcquisition level";
 	  aLock.unlock();
+	  DEB_TRACE() << "Preparing the acquisition at the controller level";
 	  m_ct.prepareAcq();
 	  aLock.lock();
+	  DEB_TRACE() << "Starting the acquisition at teh controller level";
 	  m_ct.startAcq();
+	  DEB_TRACE() << "Done with the startAcq.";
 	}
-      else
+      else {
+	//aLock.unlock();
+	DEB_TRACE() << "Stopping the acquisition at the controller level";
 	m_ct.stopAcq();
+      }
     }
   m_pars.live = liveFlag;
   m_active_flag = m_active_flag || m_pars.live;
@@ -467,19 +536,85 @@ void CtVideo::getExposure(double &anExposure) const
 
 void CtVideo::setGain(double aGain)
 {
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR1(aGain);
+
   if(!m_has_video)
-    throw LIMA_CTL_EXC(Error,"Can't change the gain on Scientific camera");
+    THROW_CTL_ERROR(Error) << "Can't change the gain on Scientific camera";
   if(aGain < 0. || aGain > 1.)
-    throw LIMA_CTL_EXC(InvalidValue,"Gain should be between 0. and 1.");
+    THROW_CTL_ERROR(InvalidValue) << "Gain should be between 0. and 1.";
 
   AutoMutex aLock(m_cond.mutex());
+  if(m_pars.auto_gain_mode == ON)
+    THROW_CTL_ERROR(Error) << "Should disable auto gain to set gain";
+
   m_pars.gain = aGain,m_pars_modify_mask |= PARMODIFYMASK_GAIN;
   _apply_params(aLock);
 }
 void CtVideo::getGain(double &aGain) const
 {
   AutoMutex aLock(m_cond.mutex());
-  aGain = m_pars.gain;
+  if(m_pars.auto_gain_mode == OFF)
+    aGain = m_pars.gain;
+  else
+    m_video->getGain(aGain);
+}
+
+bool CtVideo::checkAutoGainMode(AutoGainMode mode) const
+{
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR1(mode);
+
+  bool check_flag = false;
+  if(m_has_video)
+    {
+      switch(mode)
+	{
+	case ON:
+	  check_flag = m_video->checkAutoGainMode(HwVideoCtrlObj::ON);
+	  break;
+	case OFF:
+	  check_flag = m_video->checkAutoGainMode(HwVideoCtrlObj::OFF);
+	  break;
+	case ON_LIVE:
+	  check_flag = m_video->checkAutoGainMode(HwVideoCtrlObj::ON) &&
+	    m_video->checkAutoGainMode(HwVideoCtrlObj::OFF);
+	  break;
+	default:
+	  break;
+	}
+    }
+  DEB_RETURN() << DEB_VAR1(check_flag);
+  return check_flag;
+}
+
+void CtVideo::getAutoGainModeList(AutoGainModeList& modes) const
+{
+  DEB_MEMBER_FUNCT();
+  int nb_modes = 0;
+  if(m_video->checkAutoGainMode(HwVideoCtrlObj::OFF))
+    modes.push_back(OFF),++nb_modes;
+  if(m_video->checkAutoGainMode(HwVideoCtrlObj::ON))
+    modes.push_back(ON),++nb_modes;
+
+  if(nb_modes == 2)		// All modes
+    modes.push_back(ON_LIVE);
+}
+
+void CtVideo::setAutoGainMode(AutoGainMode mode)
+{
+  DEB_MEMBER_FUNCT();
+  if(!checkAutoGainMode(mode))
+    THROW_CTL_ERROR(NotSupported) << DEB_VAR1(mode);
+  AutoMutex aLock(m_cond.mutex());
+  m_pars.auto_gain_mode = mode,m_pars_modify_mask |= PARMODIFYMASK_AUTO_GAIN;
+  _apply_params(aLock);
+}
+
+void CtVideo::getAutoGainMode(AutoGainMode& mode) const
+{
+  AutoMutex aLock(m_cond.mutex());
+  mode = m_pars.auto_gain_mode;
 }
 
 void CtVideo::setMode(VideoMode aMode)
@@ -540,7 +675,7 @@ void CtVideo::getLastImage(CtVideo::Image &anImage) const
 void CtVideo::getLastImageCounter(long long &anImageCounter) const
 {
   AutoMutex aLock(m_cond.mutex());
-  anImageCounter = (int) m_image_counter;
+  anImageCounter = m_image_counter;
 }
 
 void CtVideo::registerImageCallback(ImageCallback &cb)
@@ -551,10 +686,7 @@ void CtVideo::registerImageCallback(ImageCallback &cb)
   DEB_PARAM() << DEB_VAR2(&cb, m_image_callback);
   
   if(m_image_callback)
-    {
-      DEB_ERROR() << "ImageCallback already registered";
-      throw LIMA_CTL_EXC(InvalidValue, "ImageCallback already registered");
-    }
+    THROW_CTL_ERROR(InvalidValue) << "ImageCallback already registered";
 
   m_image_callback = &cb;
 }
@@ -566,10 +698,7 @@ void CtVideo::unregisterImageCallback(ImageCallback &cb)
   AutoMutex aLock(m_cond.mutex());
   DEB_PARAM() << DEB_VAR2(&cb, m_image_callback);
   if(m_image_callback != &cb)
-    {
-      DEB_ERROR() << "ImageCallback not registered";
-      throw LIMA_CTL_EXC(InvalidValue, "ImageCallback not registered"); 
-    }
+    THROW_CTL_ERROR(InvalidValue) << "ImageCallback not registered"; 
 
   m_image_callback = NULL;
 }
@@ -604,8 +733,7 @@ void CtVideo::getSupportedVideoMode(std::list<VideoMode> &modeList)
 	case Bpp32S:
 	  modeList.push_back(Y32); break;
 	default:
-	  DEB_ERROR() << "Image type not yet managed";
-	  throw LIMA_CTL_EXC(Error, "Image type not yet managed");
+	  THROW_CTL_ERROR(Error) <<  "Image type not yet managed";
 	}
     }
 }
@@ -693,7 +821,11 @@ void CtVideo::_apply_params(AutoMutex &aLock,bool aForceLiveFlag)
 	{
 	  if(m_pars_modify_mask & PARMODIFYMASK_MODE)
 	    m_video->setVideoMode(m_pars.mode);
-	  if(m_pars_modify_mask & PARMODIFYMASK_GAIN)
+	  if(m_pars_modify_mask & PARMODIFYMASK_AUTO_GAIN)
+	    m_video->setHwAutoGainMode(m_pars.auto_gain_mode == OFF ? 
+				       HwVideoCtrlObj::OFF : HwVideoCtrlObj::ON);
+	  if(m_pars.auto_gain_mode == OFF && 
+	     (m_pars_modify_mask & PARMODIFYMASK_GAIN))
 	    m_video->setGain(m_pars.gain);
 	  if(m_pars_modify_mask & PARMODIFYMASK_BIN)
 	    {
@@ -780,7 +912,25 @@ void CtVideo::_prepareAcq()
   aLock.unlock();
 
   if(m_has_video)
-    m_video->setLive(false);
+    {
+      m_video->setLive(false);
+      if(m_pars.auto_gain_mode == ON_LIVE)
+	{
+	  int nb_frames;
+	  m_sync->getNbFrames(nb_frames);
+	  m_video->setAutoGainMode(nb_frames ? 
+				   HwVideoCtrlObj::OFF : HwVideoCtrlObj::ON);
+	  if(!nb_frames)
+	    m_video->setGain(m_pars.gain);
+	}
+      else
+	{
+	  m_video->setAutoGainMode(m_pars.auto_gain_mode == OFF ? 
+				   HwVideoCtrlObj::OFF : HwVideoCtrlObj::ON);
+	  if(m_pars.auto_gain_mode == OFF)
+	    m_video->setGain(m_pars.gain);
+	}
+    }
   
   aLock.lock();
   m_stopping_live = false;
@@ -792,6 +942,9 @@ void CtVideo::_prepareAcq()
   
   m_read_image->frameNumber = -1;
   m_write_image->frameNumber = -1;
+
+  CtBuffer* buffer = m_ct.buffer();
+  buffer->getNumber(m_data_2_image_task->m_nb_buffer);
 }
 
 #ifdef WITH_CONFIG
@@ -813,6 +966,7 @@ void CtVideo::Parameters::reset()
   live = false;
   exposure = 1.;
   gain = -1.;
+  auto_gain_mode = CtVideo::OFF;
   mode = Y8;
   roi.reset();
   bin.reset();

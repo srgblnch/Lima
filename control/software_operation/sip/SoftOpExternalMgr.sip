@@ -59,15 +59,19 @@ sipRes = aReturnListPt;
     SIP_PYOBJECT addOp(SoftOpId,const alias&,int stage);
 %MethodCode
     SoftOpInstance anInstance;
+TRY
     sipCpp->addOp(a0,*a1,a2,anInstance);
 INSTANCE_2_SoftOp
+CATCH
 %End
     void delOp(const alias&);
     SIP_PYOBJECT getOpClass(const alias&) const;
 %MethodCode
     SoftOpInstance anInstance;
+TRY
     sipCpp->getOpClass(*a0,anInstance);
 INSTANCE_2_SoftOp
+CATCH
 %End
 
     void setEndLinkTaskCallback(TaskEventCallback *aCbk);
@@ -102,6 +106,8 @@ INSTANCE_2_SoftOp
 	  sipRes = sipConvertFromType(anInstance.m_opt,sipType_SoftOpRoi2Spectrum,NULL);break; \
 	case(SOFTROI): \
 	  sipRes = sipConvertFromType(anInstance.m_opt,sipType_SoftOpSoftRoi,NULL);break; \
+	case(PEAKFINDER): \
+	  sipRes = sipConvertFromType(anInstance.m_opt,sipType_SoftOpPeakFinder,NULL);break; \
 	case(USER_LINK_TASK): \
 	  sipRes = sipConvertFromType(anInstance.m_opt,sipType_SoftUserLinkTask,NULL);break; \
 	case(USER_SINK_TASK): \
@@ -115,5 +121,17 @@ INSTANCE_2_SoftOp
         Py_INCREF(Py_None); \
 	sipRes = Py_None; \
       }
+
+#define TRY try \
+      {
+#define CATCH						\
+    }							\
+    catch(Exception &exp)				\
+    {							\
+    const std::string& tmpString = exp.getErrMsg();	\
+    const char *detail = tmpString.c_str();		\
+    PyErr_SetString(sipException_Exception, detail);	\
+    return NULL;					\
+    }
 %End
 };

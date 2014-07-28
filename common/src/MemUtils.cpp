@@ -53,7 +53,7 @@ void lima::GetSystemMem(int& mem_unit, int& system_mem)
 	statex.dwLength = sizeof(statex);
 	
 	GlobalMemoryStatusEx(&statex);
-	long long tot_mem = (long long) statex.ullTotalPhys;
+	long long tot_mem = (long long) statex.ullAvailPhys;
 	if (mem_unit == 0) 
 	  mem_unit = 1;
 #endif
@@ -89,7 +89,7 @@ int lima::GetDefMaxNbBuffers(const FrameDim& frame_dim, double sys_mem_factor)
 		throw LIMA_HW_EXC(InvalidValue, "Invalid FrameDim");
 
 	if (sys_mem_factor == 0)
-		sys_mem_factor = 0.8;
+		sys_mem_factor = 0.7;
 
 	int tot_buffers;
 	GetSystemMem(frame_size, tot_buffers);

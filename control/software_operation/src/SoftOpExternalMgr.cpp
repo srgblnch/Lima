@@ -30,9 +30,11 @@ static SoftOpKey SoftOpTable[] = {
   SoftOpKey(FLIP,"Flip"),
   SoftOpKey(MASK,"Mask"),
   SoftOpKey(ROICOUNTERS,"Roi counters"),
+  SoftOpKey(ROI2SPECTRUM,"Roi 2 spectrum"),
   SoftOpKey(SOFTROI,"Software roi"),
   SoftOpKey(USER_LINK_TASK,"User link task"),
   SoftOpKey(USER_SINK_TASK,"User sink task"),
+  SoftOpKey(PEAKFINDER,"Peak Finder"),
   SoftOpKey()
 };
 
@@ -136,10 +138,16 @@ void SoftOpExternalMgr::addOp(SoftOpId aSoftOpId,
       newInstance.m_opt = new SoftOpMask();
       newInstance.m_linkable = true;
       break;
+    case ROI2SPECTRUM:
+      newInstance.m_opt = new SoftOpRoi2Spectrum();
+      break;
     case SOFTROI:
       newInstance.m_opt = new SoftOpSoftRoi();
       newInstance.m_linkable = true;
       break;
+    case PEAKFINDER:
+      newInstance.m_opt = new SoftOpPeakFinder();
+      break;      
     case USER_LINK_TASK:
       newInstance.m_opt = new SoftUserLinkTask();
       newInstance.m_linkable = true;
@@ -148,7 +156,7 @@ void SoftOpExternalMgr::addOp(SoftOpId aSoftOpId,
       newInstance.m_opt = new SoftUserSinkTask();
       break;
     default:
-      throw LIMA_CTL_EXC(InvalidValue,"Not yet managed");
+      THROW_CTL_ERROR(InvalidValue) << "Not yet managed";
     }
   std::pair<Stage2Instance::iterator,bool> aResult = 
     m_stage2instance.insert(std::pair<stage,std::list<SoftOpInstance> >(aStage,std::list<SoftOpInstance>()));
@@ -233,15 +241,17 @@ void SoftOpExternalMgr::addTo(TaskMgr &aTaskMgr,
       for(std::list<SoftOpInstance>::const_iterator k = i->second.begin();
 	  k != i->second.end();++k)
 	{
+	  if(!k->m_opt->addTo(aTaskMgr,nextStage)) continue;
+
 	  if(k->m_linkable)
 	    last_link_task = nextStage;
 	  else
 	    last_sink_task = nextStage;
-	  k->m_opt->addTo(aTaskMgr,nextStage);
+
 	}
     }
-  std::pair<int,LinkTask*> aLastLink(0,NULL);
-  std::pair<int,SinkTaskBase*> aLastSink(0,NULL);
+  std::pair<int,LinkTask*> aLastLink(0,(LinkTask*)NULL);
+  std::pair<int,SinkTaskBase*> aLastSink(0,(SinkTaskBase*)NULL);
 
   aTaskMgr.getLastTask(aLastLink,aLastSink);
 
@@ -269,6 +279,7 @@ void SoftOpExternalMgr::_checkIfPossible(SoftOpId aSoftOpId,
     case ROICOUNTERS:
     case BPM:
     case USER_SINK_TASK:
+    case ROI2SPECTRUM:
       break;			// always possible
     case BACKGROUNDSUBSTRACTION:
     case BINNING:
@@ -276,11 +287,12 @@ void SoftOpExternalMgr::_checkIfPossible(SoftOpId aSoftOpId,
     case FLIP:
     case MASK:
     case SOFTROI:
+    case PEAKFINDER:
     case USER_LINK_TASK:
       checkLinkable = true;
       break;
     default:
-      throw LIMA_CTL_EXC(InvalidValue,"Not yet managed");
+      THROW_CTL_ERROR(InvalidValue) << "Not yet managed";
     }
 
   DEB_TRACE() << DEB_VAR1(checkLinkable);
@@ -298,7 +310,7 @@ void SoftOpExternalMgr::_checkIfPossible(SoftOpId aSoftOpId,
 		  char buffer[256];
 		  snprintf(buffer,sizeof(buffer),"%s task  %s is already active on that level",
 			   k->m_key.m_name,k->m_alias.c_str());
-		  throw LIMA_CTL_EXC(Error,buffer);
+		  THROW_CTL_ERROR(Error) << buffer;
 		}
 	    }
 	}
