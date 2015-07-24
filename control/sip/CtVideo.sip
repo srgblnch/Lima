@@ -22,7 +22,7 @@
   class CtVideo
   {
 %TypeHeaderCode
-#include <CtVideo.h>
+#include "lima/CtVideo.h"
 using namespace lima;
 %End
 
@@ -34,6 +34,11 @@ using namespace lima;
     };
     typedef std::vector<AutoGainMode> AutoGainModeList;
 
+    enum VideoSource {
+      BASE_IMAGE,		///< video image source is BaseImage
+      LAST_IMAGE		///< video image source is the last image (after all processing)
+    };
+
     CtVideo(CtControl&);
     ~CtVideo();
     
@@ -42,13 +47,14 @@ using namespace lima;
       Parameters();
       void reset();
       
-      bool		live;
-      double		exposure;	///< exposure time in second
-      double		gain;		///< % of gain (0. <= gain <= 1.)
+      bool			live;
+      double			exposure;	///< exposure time in second
+      double			gain;		///< % of gain (0. <= gain <= 1.)
       CtVideo::AutoGainMode	auto_gain_mode;
-      VideoMode		mode;
-      Roi		roi;
-      Bin		bin;
+      CtVideo::VideoSource	video_source;
+      VideoMode			mode;
+      Roi			roi;
+      Bin			bin;
       const char* __repr__();
 %MethodCode
 	std::ostringstream str;
@@ -121,6 +127,9 @@ using namespace lima;
     void setAutoGainMode(AutoGainMode mode);
     void getAutoGainMode(AutoGainMode& mode /Out/) const;
 
+    void setVideoSource(VideoSource source);
+    void getVideoSource(VideoSource& source /Out/) const;
+
     void setMode(VideoMode aMode);
     void getMode(VideoMode &aMode /Out/) const;
 
@@ -145,7 +154,7 @@ using namespace lima;
 {
 %TypeHeaderCode
 #include <vector>
-#include <CtVideo.h>
+#include "lima/CtVideo.h"
 using namespace lima;
 %End
 

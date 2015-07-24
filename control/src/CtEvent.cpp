@@ -19,7 +19,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //###########################################################################
-#include "CtEvent.h"
+#include "lima/CtEvent.h"
 
 using namespace lima;
 
@@ -42,7 +42,7 @@ private:
 
 
 CtEvent::CtEvent(CtControl& ct)
-  : m_ct(ct)
+  : m_ct(ct),m_cb(NULL)
 {
   DEB_CONSTRUCTOR();
 
@@ -60,8 +60,7 @@ CtEvent::~CtEvent()
 {
   DEB_DESTRUCTOR();
 
-  if (m_cb)
-    delete m_cb;
+  delete m_cb;
 
   resetEventList();
 }

@@ -1,15 +1,15 @@
 #include <list>
-#include "HwVideoCtrlObj.h"
-#include "CtVideo.h"
-#include "CtAcquisition.h"
-#include "CtImage.h"
-#include "CtBuffer.h"
+#include "lima/HwVideoCtrlObj.h"
+#include "lima/CtVideo.h"
+#include "lima/CtAcquisition.h"
+#include "lima/CtImage.h"
+#include "lima/CtBuffer.h"
 
-#include "PoolThreadMgr.h"
-#include "SinkTask.h"
-#include "TaskMgr.h"
-#include "Binning.h"
-#include "SoftRoi.h"
+#include "processlib/PoolThreadMgr.h"
+#include "processlib/SinkTask.h"
+#include "processlib/TaskMgr.h"
+#include "processlib/Binning.h"
+#include "processlib/SoftRoi.h"
 
 using namespace lima;
 enum ParModifyMask
@@ -130,6 +130,7 @@ public:
     m_video(video),m_buffer(video.m_video->getBuffer()) {}
   virtual ~_InternalImageCBK() {}
   
+    Timestamp		m_start_time;
 protected:
   virtual bool newImage(char * data,int width,int height,VideoMode mode);
 private:
@@ -142,9 +143,12 @@ bool CtVideo::_InternalImageCBK::newImage(char * data,int width,int height,Video
   DEB_MEMBER_FUNCT();
   DEB_PARAM() << DEB_VAR4((void*)data,width,height,mode);
 
+  
   bool liveFlag;
   AutoMutex aLock(m_video.m_cond.mutex());
   if(m_video.m_stopping_live) return false;
+
+  Timestamp now = Timestamp::now();
 
   liveFlag = m_video.m_pars.live;
   int image_counter = (int) m_video.m_image_counter + 1;
@@ -158,6 +162,7 @@ bool CtVideo::_InternalImageCBK::newImage(char * data,int width,int height,Video
 	  lima::image2YUV((unsigned char*)data,width,height,mode,(unsigned char*)ptr);
 	  HwFrameInfoType frame_info;
 	  frame_info.acq_frame_nb = image_counter;
+	  frame_info.frame_timestamp = now - m_start_time;
 	  m_buffer.newFrameReady(frame_info);
 	}
       // Should happen only when video format is not implemented (Debug mode)
@@ -226,6 +231,7 @@ public:
     video_setting.set("exposure",pars.exposure);
     video_setting.set("gain",pars.gain);
     video_setting.set("auto_gain_mode",convert_2_string(pars.auto_gain_mode));
+    video_setting.set("video_source",convert_2_string(pars.video_source));
     video_setting.set("mode",convert_2_string(pars.mode));
 
     // --- Roi
@@ -257,6 +263,10 @@ public:
     std::string str_auto_gain_mode;
     if(video_setting.get("auto_gain_mode",str_auto_gain_mode))
       convert_from_string(str_auto_gain_mode,pars.auto_gain_mode);
+
+    std::string str_video_source;
+    if(video_setting.get("video_source",str_video_source))
+      convert_from_string(str_video_source,pars.video_source);
 
     std::string strmode;
     if(video_setting.get("mode",strmode))
@@ -591,6 +601,12 @@ bool CtVideo::checkAutoGainMode(AutoGainMode mode) const
 void CtVideo::getAutoGainModeList(AutoGainModeList& modes) const
 {
   DEB_MEMBER_FUNCT();
+  if(!m_has_video)
+    {
+      modes.push_back(OFF);
+      return;
+    }
+
   int nb_modes = 0;
   if(m_video->checkAutoGainMode(HwVideoCtrlObj::OFF))
     modes.push_back(OFF),++nb_modes;
@@ -615,6 +631,20 @@ void CtVideo::getAutoGainMode(AutoGainMode& mode) const
 {
   AutoMutex aLock(m_cond.mutex());
   mode = m_pars.auto_gain_mode;
+}
+
+void CtVideo::setVideoSource(VideoSource source)
+{
+  DEB_MEMBER_FUNCT();
+  AutoMutex aLock(m_cond.mutex());
+  m_pars.video_source = source;
+  _apply_params(aLock);
+}
+
+void CtVideo::getVideoSource(VideoSource& source) const
+{
+  AutoMutex aLock(m_cond.mutex());
+  source = m_pars.video_source;
 }
 
 void CtVideo::setMode(VideoMode aMode)
@@ -732,6 +762,15 @@ void CtVideo::getSupportedVideoMode(std::list<VideoMode> &modeList)
 	case Bpp32:
 	case Bpp32S:
 	  modeList.push_back(Y32); break;
+
+	case Bpp1:
+	case Bpp4:
+	case Bpp6:
+	  modeList.push_back(Y8); break;
+	case Bpp24:
+	case Bpp24S:
+	  modeList.push_back(Y32); break;
+
 	default:
 	  THROW_CTL_ERROR(Error) <<  "Image type not yet managed";
 	}
@@ -947,6 +986,11 @@ void CtVideo::_prepareAcq()
   buffer->getNumber(m_data_2_image_task->m_nb_buffer);
 }
 
+void CtVideo::_startAcqTime()
+{
+  if(m_internal_image_callback)
+    m_internal_image_callback->m_start_time = Timestamp::now();
+}
 #ifdef WITH_CONFIG
 CtConfig::ModuleTypeCallback* CtVideo::_getConfigHandler()
 {
@@ -967,6 +1011,7 @@ void CtVideo::Parameters::reset()
   exposure = 1.;
   gain = -1.;
   auto_gain_mode = CtVideo::OFF;
+  video_source = CtVideo::BASE_IMAGE;
   mode = Y8;
   roi.reset();
   bin.reset();

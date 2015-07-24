@@ -16,6 +16,7 @@ prosilica
 roperscientific
 adsc
 mythen
+mythen3
 ueye
 pco
 perkinelmer
@@ -30,6 +31,9 @@ pointgrey
 dexela
 rayonixhs
 aviex
+meta
+merlin
+v4l2
 *.obj
 lima*.exp
 lima*.lib
@@ -37,3 +41,5 @@ lima*.lib
 *.pyd
 .svn
 imxpad
+ultra
+xspress3

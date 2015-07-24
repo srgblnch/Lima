@@ -68,6 +68,9 @@ ifneq ($(COMPILE_MYTHEN), 0)
 sip-modules += mythen
 endif
 
+ifneq ($(COMPILE_MYTHEN3), 0)
+sip-modules += mythen3
+endif
 
 ifneq ($(COMPILE_UEYE), 0)
 sip-modules += ueye
@@ -119,6 +122,18 @@ endif
 
 ifneq ($(COMPILE_AVIEX), 0)
 sip-modules += aviex
+endif
+
+ifneq ($(COMPILE_META), 0)
+sip-modules += meta
+endif
+
+ifneq ($(COMPILE_MERLIN), 0)
+sip-modules += merlin
+endif
+
+ifneq ($(COMPILE_V4l2), 0)
+sip-modules += v4l2
 endif
 
 all:	src

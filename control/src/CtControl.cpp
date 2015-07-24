@@ -22,27 +22,27 @@
 #include <string>
 #include <sstream>
 
-#include "CtControl.h"
-#include "CtSaving.h"
+#include "lima/CtControl.h"
+#include "lima/CtSaving.h"
 #ifdef WITH_SPS_IMAGE
-#include "CtSpsImage.h"
+#include "lima/CtSpsImage.h"
 #endif
-#include "CtAcquisition.h"
-#include "CtImage.h"
-#include "CtBuffer.h"
-#include "CtShutter.h"
-#include "CtAccumulation.h"
-#include "CtVideo.h"
-#include "CtEvent.h"
+#include "lima/CtAcquisition.h"
+#include "lima/CtImage.h"
+#include "lima/CtBuffer.h"
+#include "lima/CtShutter.h"
+#include "lima/CtAccumulation.h"
+#include "lima/CtVideo.h"
+#include "lima/CtEvent.h"
 #ifdef WITH_CONFIG
-#include "CtConfig.h"
+#include "lima/CtConfig.h"
 #endif
-#include "SoftOpInternalMgr.h"
-#include "SoftOpExternalMgr.h"
+#include "lima/SoftOpInternalMgr.h"
+#include "lima/SoftOpExternalMgr.h"
 
-#include "HwReconstructionCtrlObj.h"
+#include "lima/HwReconstructionCtrlObj.h"
 
-#include "PoolThreadMgr.h"
+#include "processlib/PoolThreadMgr.h"
 
 using namespace lima;
 
@@ -145,6 +145,139 @@ public:
 private:
   CtControl& m_ct;
 };
+
+
+class CtControl::ImageStatusThread : public Thread
+{
+  DEB_CLASS_NAMESPC(DebModControl, "ImageStatusThread", "CtControl");
+
+public:
+  ImageStatusThread(Cond& cond, ImageStatusCallback *cb);
+  ~ImageStatusThread();
+
+  ImageStatusCallback *cb()
+  { 
+    return m_cb; 
+  }
+
+  void imageStatusChanged(const ImageStatus& status, bool force=false,
+			  bool wait=false);
+
+protected:
+  virtual void threadFunction();
+  
+private:
+  struct ChangeEvent {
+    ImageStatus status;
+    bool force;
+    bool *finished;
+  };
+  
+  Cond& m_cond;
+  ImageStatusCallback *m_cb;
+  ImageStatus m_last_status;
+  std::list<ChangeEvent *> m_event_list;
+};
+
+CtControl::ImageStatusThread::ImageStatusThread(Cond& cond, 
+						ImageStatusCallback *cb)
+  : m_cond(cond), m_cb(cb)
+{
+  DEB_CONSTRUCTOR();
+  start();
+}
+
+CtControl::ImageStatusThread::~ImageStatusThread()
+{
+  DEB_DESTRUCTOR();
+  AutoMutex lock(m_cond.mutex());
+
+  // signal quit
+  m_event_list.push_front(NULL);
+  m_cond.broadcast();
+
+  while (!m_event_list.empty())
+    m_cond.wait();
+}
+  
+void CtControl::ImageStatusThread::imageStatusChanged(const ImageStatus& status, 
+						      bool force, bool wait)
+{
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR3(status, force, wait);
+
+  if (wait && !force)
+    THROW_CTL_ERROR(InvalidValue) << "Cannot wait for event without forcing";
+
+  AutoMutex lock(m_cond.mutex());
+
+  ImageStatusCallback::RatePolicy cb_rate_policy;
+  m_cb->getRatePolicy(cb_rate_policy);
+  if (cb_rate_policy == ImageStatusCallback::RateAllFrames)
+    force = true;
+  if ((status == m_last_status) || ((status < m_last_status) && !force)) {
+    DEB_TRACE() << "Skipping";
+    return;
+  }
+
+  volatile bool finished = false;
+  ChangeEvent *event = new ChangeEvent;
+  event->status = status;
+  event->force = force;
+  event->finished = wait ? (bool *) &finished : NULL;
+
+  // skip previous non-forced event
+  if (!m_event_list.empty()) {
+    ChangeEvent *prev = m_event_list.front();
+    if (!prev->force) {
+      DEB_TRACE() << "Deleting previous event: " 
+		  << DEB_VAR2(prev->status, prev->force);
+      m_event_list.pop_front();
+      delete prev;
+    }
+  }
+
+  m_event_list.push_front(event);
+  m_last_status = status;
+  m_cond.broadcast();
+
+  while (wait && !finished)
+    m_cond.wait();
+}
+
+void CtControl::ImageStatusThread::threadFunction()
+{
+  DEB_STATIC_FUNCT();
+
+  AutoMutex lock(m_cond.mutex());
+
+  while (true) {
+    while (m_event_list.empty())
+      m_cond.wait();
+
+    ChangeEvent *event = m_event_list.back();
+    m_event_list.pop_back();
+
+    if (!event)
+      break;
+
+    lock.unlock();
+    DEB_TRACE() << "Calling callback: " << DEB_VAR1(event->status);
+    m_cb->imageStatusChanged(event->status);
+    lock.lock();
+
+    if (event->finished) {
+      *event->finished = true;
+      m_cond.broadcast();
+    }
+
+    delete event;
+  }
+
+  m_cond.broadcast();
+}
+
+
 // --- helper
 
 
@@ -158,7 +291,6 @@ CtControl::CtControl(HwInterface *hw) :
   m_images_buffer_size(16),
   m_policy(All), m_ready(false),
   m_autosave(false), m_running(false),
-  m_img_status_cb(NULL),
   m_reconstruction_cbk(NULL)
 {
   DEB_CONSTRUCTOR();
@@ -227,9 +359,13 @@ CtControl::~CtControl()
   PoolThreadMgr& pool_thread_mgr = PoolThreadMgr::get();
   pool_thread_mgr.wait();
 
-  if (m_img_status_cb)
-    unregisterImageStatusCallback(*m_img_status_cb);
-  
+  for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+      i != m_img_status_thread_list.end();++i)
+    {
+      (*i)->cb()->setImageStatusCallbackGen(NULL);
+      delete *i;
+    }
+
   if(m_reconstruction_cbk)
     {
       HwReconstructionCtrlObj* reconstruction_obj;
@@ -251,6 +387,7 @@ CtControl::~CtControl()
   delete m_ct_shutter;
   delete m_ct_accumulation;
   delete m_ct_video;
+  delete m_ct_event;
 
   delete m_op_int;
   delete m_op_ext;
@@ -411,6 +548,7 @@ void CtControl::startAcq()
 
   AutoMutex aLock(m_cond.mutex());
 
+  m_ct_video->_startAcqTime();
   m_hw->startAcq();
   m_status.AcquisitionStatus = AcqRunning;
   DEB_TRACE() << "Hardware Acquisition started";
@@ -506,6 +644,15 @@ void CtControl::_calcAcqStatus()
 	    m_status.AcquisitionStatus = AcqReady;
 	  DEB_TRACE() << DEB_VAR1(m_status);
 	}
+
+      if (!m_img_status_thread_list.empty() && 
+	  (m_status.AcquisitionStatus != AcqRunning)) {
+	aLock.unlock();
+	for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+	    i != m_img_status_thread_list.end();++i)
+	  (*i)->imageStatusChanged(m_status.ImageCounters, 1);
+	return;
+      }
     }
 }
 
@@ -519,21 +666,135 @@ void CtControl::getImageStatus(ImageStatus& status) const
   DEB_RETURN() << DEB_VAR1(status);
 }
 
-void CtControl::ReadImage(Data &aReturnData,long frameNumber, 
+void CtControl::ReadImage(Data &aReturnData,long frameNumber,
 			  long readBlockLen)
 {
   DEB_MEMBER_FUNCT();
   DEB_PARAM() << DEB_VAR2(frameNumber, readBlockLen);
+  readBlock(aReturnData, frameNumber, readBlockLen, false);
+}
+
+void CtControl::ReadBaseImage(Data &aReturnData,long frameNumber,
+			      long readBlockLen)
+{
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR2(frameNumber, readBlockLen);
+  readBlock(aReturnData, frameNumber, readBlockLen, true);
+}
+
+void CtControl::readBlock(Data &aReturnData,long frameNumber,long readBlockLen,
+			  bool baseImage)
+{
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR3(frameNumber, readBlockLen, baseImage);
+
+  FrameDim imgDim;
+  m_ct_image->getImageDim(imgDim);
+
+  int concatNbFrames = 1;
 
   AutoMutex aLock(m_cond.mutex());
-  if(m_op_ext_link_task_active)
-    {
-      if (readBlockLen != 1)
-	throw LIMA_CTL_EXC(NotSupported, "Cannot read more than one frame "
-			   "at a time with External Operations");
-      if(frameNumber < 0)
-	frameNumber = m_status.ImageCounters.LastImageReady;
+  ImageStatus &imgStatus = m_status.ImageCounters;
+  long lastFrame;
+  if (m_op_ext_link_task_active && !baseImage) {
+    lastFrame = imgStatus.LastImageReady;
+  } else {
+    CtSaving::ManagedMode savingManagedMode;
+    m_ct_saving->getManagedMode(savingManagedMode);
+    if ((savingManagedMode == CtSaving::Hardware) && !baseImage) {
+      lastFrame = imgStatus.LastImageSaved;
+    } else {
+      lastFrame = imgStatus.LastBaseImageReady;
 
+      AcqMode acqMode;
+      m_ct_acq->getAcqMode(acqMode);
+      //Authorize to read the current frame in Accumulation Mode
+      int acq_nb_frames;
+      m_ct_acq->getAcqNbFrames(acq_nb_frames);
+      if (acqMode == Accumulation && lastFrame < acq_nb_frames - 1)
+	++lastFrame;
+
+      // Only read multiple frames in one block if not software ROI
+      if (acqMode == Concatenation) {
+	FrameDim hwImgDim;
+	m_ct_image->getHwImageDim(hwImgDim);
+	if (hwImgDim == imgDim)
+	  m_ct_acq->getConcatNbFrames(concatNbFrames);
+      }
+    }
+  }
+
+  if (frameNumber < 0) {
+    frameNumber = lastFrame - (readBlockLen - 1);
+    if (frameNumber < 0)
+      THROW_CTL_ERROR(Error) << "Frame(s) not available yet";
+  } else if (frameNumber + readBlockLen - 1 > lastFrame)
+    THROW_CTL_ERROR(Error) << "Frame(s) not available yet";
+  aLock.unlock();
+
+  bool one_block = (readBlockLen == 1);
+  if (concatNbFrames > 1) {
+    long firstBuffer = frameNumber / concatNbFrames;
+    long lastBuffer = (frameNumber + readBlockLen - 1) / concatNbFrames;
+    one_block = (firstBuffer == lastBuffer);
+  }
+
+  char *p = NULL;
+  long framesRead = 0; 
+  while (framesRead < readBlockLen) {
+    int nbFrames = 1;
+    if ((readBlockLen > 1) && (concatNbFrames > 1)) {
+      long lastFrame = frameNumber + (readBlockLen - framesRead);
+      long nextBuffer = frameNumber / concatNbFrames + 1;
+      if (lastFrame > nextBuffer * concatNbFrames)
+	lastFrame = nextBuffer * concatNbFrames;
+      nbFrames = lastFrame - frameNumber;
+    }
+
+    Data auxData;
+    readOneImageBuffer(auxData, frameNumber, nbFrames, baseImage);
+
+    int imageSize = imgDim.getMemSize();
+    if (imageSize * nbFrames > auxData.size())
+      THROW_CTL_ERROR(Error) << "Roi dim (" << imgDim << ") * "
+			     << "nbFrames (" << nbFrames << ") > "
+			     << "HwBuffer dim (" << auxData.size() << "): "
+			     << DEB_VAR1(auxData);
+
+    if (one_block) {
+      aReturnData = auxData;
+    } else {
+      if (p == NULL) {
+	aReturnData = auxData;
+	Buffer *buffer = new Buffer(imageSize * readBlockLen);
+	aReturnData.setBuffer(buffer);
+	if (readBlockLen > 1) {
+	  if (aReturnData.dimensions.size() == 2)
+	    aReturnData.dimensions.push_back(readBlockLen);
+	  else
+	    aReturnData.dimensions[2] = readBlockLen;
+	}
+	p = (char *) aReturnData.data();
+      }
+      memcpy(p, auxData.data(), imageSize * nbFrames);
+      p += imageSize * nbFrames;
+    }
+
+    framesRead += nbFrames;
+  }
+
+  DEB_RETURN() << DEB_VAR1(aReturnData);
+}
+
+void CtControl::readOneImageBuffer(Data &aReturnData,long frameNumber, 
+				   long readBlockLen, bool baseImage)
+{
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR3(frameNumber, readBlockLen, baseImage);
+
+  AutoMutex aLock(m_cond.mutex());
+  if(m_op_ext_link_task_active && !baseImage)
+    {
       std::map<int,Data>::iterator i = m_images_buffer.find(frameNumber);
       if(i != m_images_buffer.end())
 	aReturnData = i->second;
@@ -550,59 +811,16 @@ void CtControl::ReadImage(Data &aReturnData,long frameNumber,
       aLock.unlock();
       CtSaving::ManagedMode savingManagedMode;
       m_ct_saving->getManagedMode(savingManagedMode);
-      if(savingManagedMode == CtSaving::Hardware)
-	{
-	  if (readBlockLen != 1)
-	    THROW_CTL_ERROR(NotSupported) << "Cannot read more than one frame " 
-					  << "at a time with Hardware Saving";
-
-	  m_ct_saving->_ReadImage(aReturnData,frameNumber);
-	}
-      else
-	ReadBaseImage(aReturnData,frameNumber,readBlockLen);
+      if((savingManagedMode == CtSaving::Hardware) && !baseImage) {
+	m_ct_saving->_ReadImage(aReturnData,frameNumber);
+      } else {
+	m_ct_buffer->getFrame(aReturnData,frameNumber,readBlockLen);
+	FrameDim imgDim;
+	m_ct_image->getImageDim(imgDim);
+	aReturnData.dimensions[0] = imgDim.getSize().getWidth();
+	aReturnData.dimensions[1] = imgDim.getSize().getHeight();
+      }
     }
-
-  DEB_RETURN() << DEB_VAR1(aReturnData);
-}
-
-void CtControl::ReadBaseImage(Data &aReturnData,long frameNumber, 
-			      long readBlockLen)
-{
-  DEB_MEMBER_FUNCT();
-  DEB_PARAM() << DEB_VAR2(frameNumber, readBlockLen);
-
-  AcqMode acqMode;
-  m_ct_acq->getAcqMode(acqMode);
-  int acq_nb_frames;
-  m_ct_acq->getAcqNbFrames(acq_nb_frames);
-
-  AutoMutex aLock(m_cond.mutex());
-  ImageStatus &imgStatus = m_status.ImageCounters;
-  long lastFrame = imgStatus.LastBaseImageReady;
-
-  //Authorize to read the current frame in Accumulation Mode
-  if(acqMode == Accumulation && lastFrame < acq_nb_frames - 1)
-    ++lastFrame;
-
-  if (frameNumber < 0) {
-    frameNumber = lastFrame - (readBlockLen - 1);
-    if (frameNumber < 0)
-      THROW_CTL_ERROR(Error) << "Frame(s) not available yet";
-  } else if (frameNumber + readBlockLen - 1 > lastFrame)
-    THROW_CTL_ERROR(Error) << "Frame(s) not available yet";
-  aLock.unlock();
-  m_ct_buffer->getFrame(aReturnData,frameNumber,readBlockLen);
-  
-  FrameDim img_dim;
-  m_ct_image->getImageDim(img_dim);
-  int roiWidth = img_dim.getSize().getWidth();
-  int roiHeight = img_dim.getSize().getHeight() * readBlockLen;
-  if((roiWidth * roiHeight) >
-     (aReturnData.dimensions[0] * aReturnData.dimensions[1]))
-    THROW_CTL_ERROR(Error) << "Roi dim > HwBuffer dim";
-
-  aReturnData.dimensions[0] = roiWidth;
-  aReturnData.dimensions[1] = roiHeight;
 
   DEB_RETURN() << DEB_VAR1(aReturnData);
 }
@@ -653,10 +871,14 @@ void CtControl::resetStatus(bool only_acq_status)
 {
   DEB_MEMBER_FUNCT();
   DEB_TRACE() << "Reseting the status";
-  if (only_acq_status)
+  if (only_acq_status) {
     m_status.AcquisitionStatus = AcqReady;
-  else
+  } else {
     m_status.reset();
+    for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+	i != m_img_status_thread_list.end();++i)
+      (*i)->imageStatusChanged(m_status.ImageCounters, 1);
+  }
 }
 
 bool CtControl::newFrameReady(Data& fdata)
@@ -693,8 +915,9 @@ bool CtControl::newFrameReady(Data& fdata)
       if (!internal_stage)
 	newBaseImageReady(fdata);
 
-      if (m_img_status_cb)
-	m_img_status_cb->imageStatusChanged(m_status.ImageCounters);
+    for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+	i != m_img_status_thread_list.end();++i)
+      (*i)->imageStatusChanged(m_status.ImageCounters);
       _calcAcqStatus();
     }
 
@@ -708,7 +931,6 @@ void CtControl::newBaseImageReady(Data &aData)
 
   AutoMutex aLock(m_cond.mutex());
   long expectedImageReady = m_status.ImageCounters.LastBaseImageReady + 1;
-  bool img_status_changed = false;
   if(aData.frameNumber == expectedImageReady)
     {
       while(!m_base_images_ready.empty())
@@ -727,8 +949,6 @@ void CtControl::newBaseImageReady(Data &aData)
       imgStatus.LastBaseImageReady = expectedImageReady;
       if(!m_op_ext_link_task_active)
 	imgStatus.LastImageReady = expectedImageReady;
-      
-      img_status_changed = true;
     }
   else
     m_base_images_ready.insert(aData);
@@ -742,11 +962,14 @@ void CtControl::newBaseImageReady(Data &aData)
   if(m_display_active_flag)
     m_ct_sps_image->frameReady(aData);
 #endif
+  CtVideo::VideoSource source;m_ct_video->getVideoSource(source);
+  if(source == CtVideo::BASE_IMAGE ||
+        (source == CtVideo::LAST_IMAGE && !m_op_ext_link_task_active))
+    m_ct_video->frameReady(aData);
 
-  m_ct_video->frameReady(aData);
-
-  if(m_op_ext_link_task_active && m_img_status_cb && img_status_changed)
-    m_img_status_cb->imageStatusChanged(m_status.ImageCounters);
+  for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+      i != m_img_status_thread_list.end();++i)
+      (*i)->imageStatusChanged(m_status.ImageCounters);
 
   _calcAcqStatus();
 }
@@ -758,7 +981,6 @@ void CtControl::newImageReady(Data &aData)
 
   AutoMutex aLock(m_cond.mutex());
   long expectedImageReady = m_status.ImageCounters.LastImageReady + 1;
-  bool img_status_changed = false;
   if(aData.frameNumber == expectedImageReady)
     {
       while(!m_images_ready.empty())
@@ -774,8 +996,6 @@ void CtControl::newImageReady(Data &aData)
 	    break;
 	}
       m_status.ImageCounters.LastImageReady = expectedImageReady;
-
-      img_status_changed = true;
     }
   else
     m_images_ready.insert(aData);
@@ -790,8 +1010,13 @@ void CtControl::newImageReady(Data &aData)
   if(m_autosave)
     newFrameToSave(aData);
 
-  if (m_img_status_cb && img_status_changed)
-    m_img_status_cb->imageStatusChanged(m_status.ImageCounters);
+  CtVideo::VideoSource source;m_ct_video->getVideoSource(source);
+  if(source == CtVideo::LAST_IMAGE)
+    m_ct_video->frameReady(aData);
+
+  for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+      i != m_img_status_thread_list.end();++i)
+    (*i)->imageStatusChanged(m_status.ImageCounters);
   _calcAcqStatus();
 }
 
@@ -823,8 +1048,9 @@ void CtControl::newImageSaved(Data&)
     }
   aLock.unlock();
 
-  if (m_img_status_cb)
-    m_img_status_cb->imageStatusChanged(m_status.ImageCounters);
+  for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+      i != m_img_status_thread_list.end();++i)
+    (*i)->imageStatusChanged(m_status.ImageCounters);
   _calcAcqStatus();
 }
 
@@ -838,28 +1064,52 @@ void CtControl::newFrameToSave(Data& fdata)
   m_ct_saving->frameReady(fdata);
 }
 
+/** registerImageStatusCallback is not thread safe!!!
+ */
 void CtControl::registerImageStatusCallback(ImageStatusCallback& cb)
 {
   DEB_MEMBER_FUNCT();
-  DEB_PARAM() << DEB_VAR2(&cb, m_img_status_cb);
+  DEB_PARAM() << DEB_VAR1(&cb);
 
-  if (m_img_status_cb)
-    THROW_CTL_ERROR(InvalidValue) << "ImageStatusCallback already registered";
+  Status aStatus;
+  getStatus(aStatus);
+  if(aStatus.AcquisitionStatus == AcqRunning)
+    THROW_CTL_ERROR(Error) << "Can't register callback if acquisition is running";
 
+  ImageStatusThread *thread = new ImageStatusThread(m_cond, &cb);
+  AutoMutex aLock(m_cond.mutex());
   cb.setImageStatusCallbackGen(this);
-  m_img_status_cb = &cb;
+  m_img_status_thread_list.push_back(thread);
 }
-
+/** unregisterImageStatusCallback is not thread safe!!!
+ */
 void CtControl::unregisterImageStatusCallback(ImageStatusCallback& cb)
 {
   DEB_MEMBER_FUNCT();
-  DEB_PARAM() << DEB_VAR2(&cb, m_img_status_cb);
+  DEB_PARAM() << DEB_VAR1(&cb);
 
-  if (m_img_status_cb != &cb)
-    THROW_CTL_ERROR(InvalidValue) << "ImageStatusCallback not registered";
+  Status aStatus;
+  getStatus(aStatus);
+  if(aStatus.AcquisitionStatus != AcqReady)
+    THROW_CTL_ERROR(Error) << "Can't unregister callback if acquisition is not idle";
+
+  AutoMutex aLock(m_cond.mutex());
+  bool found = false;
+  for(ImageStatusThreadList::iterator i = m_img_status_thread_list.begin();
+      i != m_img_status_thread_list.end();++i)
+    {
+      if((*i)->cb() == &cb)
+	{
+	  found = true;
+	  delete *i;
+	  m_img_status_thread_list.erase(i);
+	  cb.setImageStatusCallbackGen(NULL);
+	  break;
+	}
+    }
   
-  m_img_status_cb = NULL;
-  cb.setImageStatusCallbackGen(NULL);
+  if (!found)
+    THROW_CTL_ERROR(InvalidValue) << "ImageStatusCallback not registered";
 }
 
 /** @brief this methode check if an overrun 
@@ -921,6 +1171,16 @@ CtControl::ImageStatus::ImageStatus()
   reset();
 }
 
+CtControl::ImageStatus::ImageStatus(long lastImgAcq, long lastBaseImgReady,
+				    long lastImgReady, long lastImgSaved,
+				    long lastCntReady):
+    LastImageAcquired(lastImgAcq), LastBaseImageReady(lastBaseImgReady),
+    LastImageReady(lastImgReady), LastImageSaved(lastImgSaved),
+    LastCounterReady(lastCntReady)
+{
+    DEB_CONSTRUCTOR();
+}
+
 void CtControl::ImageStatus::reset()
 {
   DEB_MEMBER_FUNCT();
@@ -946,6 +1206,17 @@ CtControl::Status::Status() :
   DEB_CONSTRUCTOR();
 }
 
+CtControl::Status::Status(AcqStatus acq_status, ErrorCode err,
+			  CameraErrorCode cam_err,
+			  const ImageStatus& img_status) :
+  AcquisitionStatus(acq_status),
+  Error(err),
+  CameraStatus(cam_err),
+  ImageCounters(img_status)
+{
+  DEB_CONSTRUCTOR();
+}
+
 void CtControl::Status::reset()
 {
   DEB_MEMBER_FUNCT();
@@ -960,7 +1231,7 @@ void CtControl::Status::reset()
 // class ImageStatus
 // ----------------------------------------------------------------------------
 CtControl::ImageStatusCallback::ImageStatusCallback()
-  : m_cb_gen(NULL)
+  : m_cb_gen(NULL), m_rate_policy(RateAsFastAsPossible)
 {
   DEB_CONSTRUCTOR();
 }
@@ -977,6 +1248,22 @@ CtControl::ImageStatusCallback::setImageStatusCallbackGen(CtControl *cb_gen)
 {
   DEB_MEMBER_FUNCT();
   m_cb_gen = cb_gen;
+}
+
+void
+CtControl::ImageStatusCallback::setRatePolicy(RatePolicy rate_policy)
+{
+  DEB_MEMBER_FUNCT();
+  DEB_PARAM() << DEB_VAR1(rate_policy);
+  m_rate_policy = rate_policy;
+}
+
+void
+CtControl::ImageStatusCallback::getRatePolicy(RatePolicy& rate_policy)
+{
+  DEB_MEMBER_FUNCT();
+  rate_policy = m_rate_policy;
+  DEB_RETURN() << DEB_VAR1(rate_policy);
 }
 
 #ifdef WIN32

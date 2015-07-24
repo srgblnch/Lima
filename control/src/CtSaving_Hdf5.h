@@ -23,8 +23,8 @@
 #define CTSAVING_HDF5_H
 
 #include "H5Cpp.h"
-#include "CtSaving.h"
-#include "CtAcquisition.h"
+#include "lima/CtSaving.h"
+#include "lima/CtAcquisition.h"
 #include <string>
 
 using namespace H5;
@@ -57,6 +57,7 @@ private:
 
 	struct Parameters{
 	  string det_name;
+	  string instrument_name;
 	  string det_model;
 	  string det_type;
 	  double pixel_size[2];
@@ -96,7 +97,7 @@ private:
 	DataSpace *m_image_dataspace;
 	DataSet *m_image_dataset;
 	H5File *m_file;
-	Group *m_entry, *m_measurement_detector, *m_instrument_detector, *m_measurement_detector_info;
+	Group *m_entry, *m_measurement_detector, *m_instrument_detector, *m_measurement_detector_info, *m_measurement_detector_parameters;
 	int m_entry_index;
 	string m_entry_name;
 };
